@@ -1,0 +1,21 @@
+name = "Storree Local Delivery"
+client_id = "${SHOPIFY_API_KEY}"
+application_url = "${APP_URL}"
+embedded = false
+
+[access_scopes]
+scopes = "read_orders,write_shipping,read_locations"
+
+[auth]
+redirect_urls = ["${APP_URL}/shopify/auth/callback"]
+
+[webhooks]
+api_version = "2025-01"
+
+  [[webhooks.subscriptions]]
+  topics = ["orders/paid"]
+  uri = "/shopify/webhooks/orders/paid"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/shopify/webhooks/compliance"
