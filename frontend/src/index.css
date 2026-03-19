@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --brand-orange: #F97316;
+  --brand-orange-dark: #EA6B0E;
+  --brand-orange-light: #FED7AA;
+  --brand-bg: #FAFAF9;
+  --brand-surface: #FFFFFF;
+  --brand-text: #1C1917;
+  --brand-muted: #78716C;
+  --brand-border: #E7E5E4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  background-color: var(--brand-bg);
+  color: var(--brand-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}

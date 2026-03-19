@@ -1,5 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
+import { createOrdersRouter, createPaymentsRouter, createStoresRouter } from './api/orders.js';
 import { quoteDeliveryOptions } from './domain/pricing.js';
 import { DispatchOrchestrator } from './domain/dispatch-orchestrator.js';
 import { mapProviderStatus, isStatusRegression, isValidTransition } from './domain/order-lifecycle.js';
@@ -150,6 +151,12 @@ export function createApp(config?: {
   app.use(requestContext);
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+
+  // ── Style.re Customer-Facing API ──────────────────────────────────────────
+  app.use('/api', createOrdersRouter());
+  app.use('/api', createPaymentsRouter());
+  app.use('/api', createStoresRouter());
+  // ─────────────────────────────────────────────────────────────────────────
 
   app.get('/health/ready', async (_req, res) => {
     const dbOk = config?.readiness?.db ? await config.readiness.db() : true;
