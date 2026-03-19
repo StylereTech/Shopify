@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import type { Pool } from 'pg';
 import { Logger } from '../observability/logger.js';
 import { StorreeClient } from '../infrastructure/storree/storree-client.js';

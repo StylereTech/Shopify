@@ -29,6 +29,12 @@ export class InMemoryDeliveryJobRepository implements DeliveryJobRepository {
   async create(job: DeliveryJob): Promise<void> { this.jobs.set(job.shopifyOrderId, job); }
   async update(job: DeliveryJob): Promise<void> { this.jobs.set(job.shopifyOrderId, job); }
   async getByShopifyOrderId(shopifyOrderId: string): Promise<DeliveryJob | undefined> { return this.jobs.get(shopifyOrderId); }
+  async getByDispatchId(dispatchId: string): Promise<DeliveryJob | undefined> {
+    for (const job of this.jobs.values()) {
+      if (job.dispatchId === dispatchId) return job;
+    }
+    return undefined;
+  }
 }
 
 export class InMemoryIdempotencyRepository implements IdempotencyRepository {

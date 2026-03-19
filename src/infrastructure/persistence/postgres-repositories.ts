@@ -59,7 +59,10 @@ export class PostgresDeliveryJobRepository implements DeliveryJobRepository {
     await this.pool.query('INSERT INTO delivery_jobs (id, shopify_order_id, merchant_id, service_level, status, dispatch_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [job.id, job.shopifyOrderId, job.merchantId, job.serviceLevel, job.status, job.dispatchId ?? null, job.createdAt, job.updatedAt]);
   }
   async update(job: DeliveryJob): Promise<void> {
-    await this.pool.query('UPDATE delivery_jobs SET status=$1, dispatch_id=$2, updated_at=$3 WHERE shopify_order_id=$4', [job.status, job.dispatchId ?? null, job.updatedAt, job.shopifyOrderId]);
+    await this.pool.query(
+      'UPDATE delivery_jobs SET status=$1, dispatch_id=$2, updated_at=$3, customer_phone=$4, shop_domain=$5, shopify_order_number=$6 WHERE shopify_order_id=$7',
+      [job.status, job.dispatchId ?? null, job.updatedAt, job.customerPhone ?? null, job.shopDomain ?? null, job.shopifyOrderNumber ?? null, job.shopifyOrderId]
+    );
   }
   async getByShopifyOrderId(shopifyOrderId: string): Promise<DeliveryJob | undefined> {
     const { rows } = await this.pool.query('SELECT * FROM delivery_jobs WHERE shopify_order_id=$1', [shopifyOrderId]);
@@ -69,9 +72,30 @@ export class PostgresDeliveryJobRepository implements DeliveryJobRepository {
       id: row.id,
       shopifyOrderId: row.shopify_order_id,
       merchantId: row.merchant_id,
+      shopDomain: row.shop_domain ?? undefined,
       serviceLevel: row.service_level,
       status: row.status,
       dispatchId: row.dispatch_id ?? undefined,
+      customerPhone: row.customer_phone ?? undefined,
+      shopifyOrderNumber: row.shopify_order_number ?? undefined,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at)
+    };
+  }
+  async getByDispatchId(dispatchId: string): Promise<DeliveryJob | undefined> {
+    const { rows } = await this.pool.query('SELECT * FROM delivery_jobs WHERE dispatch_id=$1', [dispatchId]);
+    const row = rows[0];
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      shopifyOrderId: row.shopify_order_id,
+      merchantId: row.merchant_id,
+      shopDomain: row.shop_domain ?? undefined,
+      serviceLevel: row.service_level,
+      status: row.status,
+      dispatchId: row.dispatch_id ?? undefined,
+      customerPhone: row.customer_phone ?? undefined,
+      shopifyOrderNumber: row.shopify_order_number ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at)
     };
@@ -82,7 +106,7 @@ export class PostgresIdempotencyRepository implements IdempotencyRepository {
   constructor(private readonly pool: Pool) {}
   async seen(key: string): Promise<boolean> {
     const { rowCount } = await this.pool.query('SELECT 1 FROM idempotency_keys WHERE key=$1', [key]);
-    return rowCount > 0;
+    return (rowCount ?? 0) > 0;
   }
   async mark(key: string): Promise<void> {
     await this.pool.query('INSERT INTO idempotency_keys (key) VALUES ($1) ON CONFLICT DO NOTHING', [key]);

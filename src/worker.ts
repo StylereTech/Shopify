@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { DispatchOrchestrator } from './domain/dispatch-orchestrator.js';
 import { env } from './config/env.js';
 import { createPostgresPool } from './infrastructure/db/postgres.js';
@@ -15,6 +15,8 @@ import { shopifyOrderWebhookSchema } from './shopify/schemas.js';
 import { MetricsRegistry } from './observability/metrics.js';
 import { StorreeApiClient, StorreeDispatchError } from './infrastructure/storree/storree-client.js';
 import { runStartupChecks } from './operations/startup-checks.js';
+import { tryAdminAlert } from './infrastructure/sms-alert.js';
+import { startDispatchWatchdog } from './domain/dispatch-watchdog.js';
 
 const pool = createPostgresPool(env.DATABASE_URL);
 const redis = new Redis(env.REDIS_URL);
@@ -34,13 +36,19 @@ if (!checks.dbOk || !checks.redisOk) {
   process.exit(1);
 }
 
+const merchantConfigs = new PostgresMerchantConfigRepository(pool);
+const jobs = new PostgresDeliveryJobRepository(pool);
+const idempotency = new PostgresIdempotencyRepository(pool);
+const dispatchAttempts = new PostgresDispatchAttemptRepository(pool);
+const auditLogs = new PostgresAuditLogRepository(pool);
+
 const orchestrator = new DispatchOrchestrator(
-  new PostgresMerchantConfigRepository(pool),
-  new PostgresDeliveryJobRepository(pool),
-  new PostgresIdempotencyRepository(pool),
+  merchantConfigs,
+  jobs,
+  idempotency,
   storreeClient,
-  new PostgresDispatchAttemptRepository(pool),
-  new PostgresAuditLogRepository(pool),
+  dispatchAttempts,
+  auditLogs,
   metrics
 );
 
@@ -76,10 +84,28 @@ const worker = new RedisDispatchWorker(
   },
   (error) => (error instanceof StorreeDispatchError ? error.retryable : true),
   metrics,
-  env.WORKER_MAX_RETRIES
+  env.WORKER_MAX_RETRIES,
+  // Admin SMS alert on max dispatch failures (Style.re 1.1 parity)
+  async (payload, error) => {
+    const p = payload as { shopDomain?: string; webhookId?: string };
+    const message = `🚨 DISPATCH ALERT: Order on ${p.shopDomain ?? 'unknown'} failed all ${env.WORKER_MAX_RETRIES} dispatch attempts. Webhook: ${p.webhookId ?? 'unknown'}. Error: ${String(error)}. Manual intervention required.`;
+    logger.error('Max dispatch failures reached — sending admin alert', {
+      shopDomain: p.shopDomain,
+      webhookId: p.webhookId,
+      error: String(error)
+    });
+    await tryAdminAlert(message, env, logger);
+  },
+  { baseRetryDelayMs: 5000, maxRetryDelayMs: 120000 }
 );
+
+// Start the dispatch watchdog (monitors stuck/orphaned jobs)
+const watchdog = startDispatchWatchdog(pool, jobs, merchantConfigs, storreeClient, dispatchAttempts, auditLogs, metrics, logger, env);
+
+logger.info('Worker started', { queueKey: env.REDIS_QUEUE_KEY });
 
 worker.start().catch((error) => {
   logger.error('Worker crashed', { error: String(error) });
+  watchdog.stop();
   process.exit(1);
 });

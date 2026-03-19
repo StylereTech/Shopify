@@ -21,16 +21,37 @@ export function isWithinServiceRadius(config: MerchantDeliveryConfig, dropoff: {
   return distanceKm(config.pickupLocation, dropoff) <= config.radiusKm;
 }
 
+/**
+ * Get the current local hour in the merchant's timezone.
+ * Falls back to UTC if the timezone is invalid.
+ */
+export function getLocalHourInTimezone(date: Date, timezone: string): number {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false
+    });
+    const hourStr = formatter.format(date);
+    const hour = parseInt(hourStr, 10);
+    // Intl can return '24' at midnight — normalize
+    return hour === 24 ? 0 : hour;
+  } catch {
+    // Fallback to UTC if timezone is bogus
+    return date.getUTCHours();
+  }
+}
+
 export function isServiceWindowOpen(
   requestedAt: Date,
   config: MerchantDeliveryConfig,
   level: DeliveryServiceLevel
 ): boolean {
-  const hour = requestedAt.getUTCHours();
+  const localHour = getLocalHourInTimezone(requestedAt, config.timezone);
   if (level === 'one_hour') {
-    return config.oneHourEnabled && hour < config.oneHourCutoffHourLocal;
+    return config.oneHourEnabled && localHour < config.oneHourCutoffHourLocal;
   }
-  return config.sameDayEnabled && hour < config.sameDayCutoffHourLocal;
+  return config.sameDayEnabled && localHour < config.sameDayCutoffHourLocal;
 }
 
 export function determineEligibleLevels(request: DeliveryQuoteRequest): DeliveryServiceLevel[] {

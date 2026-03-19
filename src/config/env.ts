@@ -17,7 +17,13 @@ const schema = z.object({
   REDIS_QUEUE_KEY: z.string().default('storree:dispatch:queue'),
   REDIS_DEAD_LETTER_KEY: z.string().default('storree:dispatch:dlq'),
   WORKER_MAX_RETRIES: z.coerce.number().int().min(1).default(3),
-  TOKEN_ENCRYPTION_KEY_HEX: z.string().length(64).default('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+  TOKEN_ENCRYPTION_KEY_HEX: z.string().length(64).default('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+  // Admin alert phone for critical dispatch failures (Twilio-format E.164)
+  ADMIN_PHONE_NUMBER: z.string().optional(),
+  // Twilio credentials for SMS alerts
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM_NUMBER: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

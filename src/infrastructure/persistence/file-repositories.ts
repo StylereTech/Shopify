@@ -57,6 +57,7 @@ export class FileDeliveryJobRepository implements DeliveryJobRepository {
   async create(job: DeliveryJob): Promise<void> { const data = await this.store.read(); data.jobs.push(job); await this.store.write(data); }
   async update(job: DeliveryJob): Promise<void> { const data = await this.store.read(); data.jobs = data.jobs.filter((j) => j.shopifyOrderId !== job.shopifyOrderId).concat(job); await this.store.write(data); }
   async getByShopifyOrderId(shopifyOrderId: string): Promise<DeliveryJob | undefined> { const data = await this.store.read(); return data.jobs.find((j) => j.shopifyOrderId === shopifyOrderId); }
+  async getByDispatchId(dispatchId: string): Promise<DeliveryJob | undefined> { const data = await this.store.read(); return data.jobs.find((j) => j.dispatchId === dispatchId); }
 }
 
 export class FileIdempotencyRepository implements IdempotencyRepository {

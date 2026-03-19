@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { createPostgresPool } from './infrastructure/db/postgres.js';

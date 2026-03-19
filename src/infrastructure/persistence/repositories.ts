@@ -17,6 +17,7 @@ export interface DeliveryJobRepository {
   create(job: DeliveryJob): Promise<void>;
   update(job: DeliveryJob): Promise<void>;
   getByShopifyOrderId(shopifyOrderId: string): Promise<DeliveryJob | undefined>;
+  getByDispatchId(dispatchId: string): Promise<DeliveryJob | undefined>;
 }
 
 export interface IdempotencyRepository {

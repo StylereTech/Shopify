@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+/** Inbound delivery status update from Storree/dispatch provider */
+export const deliveryStatusWebhookSchema = z.object({
+  dispatchId: z.string(),
+  externalReference: z.string(), // maps to shopify order id or job id
+  status: z.string(),
+  providerStatus: z.string().optional(),
+  eta: z.string().datetime({ offset: true }).optional(),
+  driverName: z.string().optional(),
+  driverPhone: z.string().optional()
+});
+
 export const carrierRateRequestSchema = z.object({
   rate: z.object({
     origin: z.object({

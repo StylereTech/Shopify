@@ -62,9 +62,12 @@ export interface DeliveryJob {
   id: string;
   shopifyOrderId: string;
   merchantId: string;
+  shopDomain?: string;
   serviceLevel: DeliveryServiceLevel;
   status: DeliveryStatus;
   dispatchId?: string;
+  customerPhone?: string;
+  shopifyOrderNumber?: string;
   createdAt: Date;
   updatedAt: Date;
 }

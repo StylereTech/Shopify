@@ -2,6 +2,8 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { quoteDeliveryOptions } from './domain/pricing.js';
 import { DispatchOrchestrator } from './domain/dispatch-orchestrator.js';
+import { mapProviderStatus, isStatusRegression, isValidTransition } from './domain/order-lifecycle.js';
+import { deliveryStatusWebhookSchema } from './shopify/schemas.js';
 import {
   InMemoryAuditLogRepository,
   InMemoryDeliveryJobRepository,
@@ -350,6 +352,81 @@ export function createApp(config?: {
       deps.metrics.increment('webhook.enqueue_failure');
       return res.status(500).json({ error: 'Queue enqueue failed' });
     }
+  });
+
+  /**
+   * Storree delivery status webhook
+   * Called by Storree/dispatch provider when delivery status changes.
+   * Updates the DeliveryJob status using the order lifecycle state machine.
+   */
+  app.post('/storree/webhooks/delivery-status', async (req, res) => {
+    const webhookId = req.header('x-webhook-id') ?? randomUUID();
+    const correlationId = req.header('x-request-id') ?? webhookId;
+
+    const parsed = deliveryStatusWebhookSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid delivery status payload', details: parsed.error.flatten() });
+    }
+
+    const { dispatchId, externalReference, status: rawStatus } = parsed.data;
+
+    const mappedStatus = mapProviderStatus(rawStatus);
+    if (!mappedStatus) {
+      deps.logger.warn('Unknown provider delivery status — ignoring', { rawStatus, dispatchId });
+      return res.status(422).json({ error: `Unknown delivery status: ${rawStatus}` });
+    }
+
+    // Find the job by dispatchId (preferred) or shopify order id
+    let job = await deps.jobs.getByDispatchId(dispatchId);
+    if (!job) {
+      job = await deps.jobs.getByShopifyOrderId(externalReference);
+    }
+
+    if (!job) {
+      deps.logger.warn('Delivery status webhook: job not found', { dispatchId, externalReference });
+      return res.status(404).json({ error: 'Delivery job not found' });
+    }
+
+    const currentStatus = job.status;
+
+    // State machine guard — reject regressions (out-of-order webhook)
+    if (isStatusRegression(currentStatus, mappedStatus)) {
+      deps.logger.warn('Delivery status webhook: status regression rejected', {
+        jobId: job.id,
+        currentStatus,
+        mappedStatus
+      });
+      return res.status(200).json({ ok: true, skipped: true, reason: 'status_regression' });
+    }
+
+    if (!isValidTransition(currentStatus, mappedStatus)) {
+      deps.logger.warn('Delivery status webhook: invalid transition', {
+        jobId: job.id,
+        currentStatus,
+        mappedStatus
+      });
+      return res.status(200).json({ ok: true, skipped: true, reason: 'invalid_transition' });
+    }
+
+    job.status = mappedStatus;
+    job.updatedAt = new Date();
+    await deps.jobs.update(job);
+
+    deps.metrics.increment(`delivery_status.${mappedStatus}`);
+
+    await deps.auditLogs.create({
+      id: randomUUID(),
+      actor: 'storree',
+      action: `delivery_status_${mappedStatus}`,
+      entityType: 'delivery_job',
+      entityId: job.id,
+      occurredAt: new Date(),
+      correlationId,
+      metadata: { dispatchId, externalReference, rawStatus, mappedStatus }
+    });
+
+    deps.logger.info('Delivery status updated', { jobId: job.id, from: currentStatus, to: mappedStatus });
+    return res.status(200).json({ ok: true, jobId: job.id, status: mappedStatus });
   });
 
   return app;
