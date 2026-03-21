@@ -74,8 +74,13 @@ const app = createApp({
 
 const checks = await runStartupChecks(pool, redis, storreeClient, logger, 'api');
 if (!checks.dbOk || !checks.redisOk) {
-  logger.error('Critical dependencies unavailable. API refusing startup.');
-  process.exit(1);
+  logger.error('Critical dependencies unavailable. API refusing startup.', { checks });
+  // Allow 3 retries with 5s delay before hard exit
+  await new Promise(r => setTimeout(r, 5000));
+  const retry = await runStartupChecks(pool, redis, storreeClient, logger, 'api');
+  if (!retry.dbOk || !retry.redisOk) {
+    process.exit(1);
+  }
 }
 
 app.listen(Number(env.PORT), () => {

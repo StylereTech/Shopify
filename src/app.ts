@@ -187,10 +187,13 @@ export function createApp(config?: {
     return res.redirect(install.redirectUrl);
   });
 
-  // Dev install bypass — skips HMAC check for development stores
+  // Dev install bypass — protected by dev secret token
   app.get('/shopify/dev-install', async (req, res) => {
     const shop = req.query.shop as string | undefined;
+    const token = req.query.token as string | undefined;
+    const devSecret = config?.shopifyApiSecret ?? 'dev-secret';
     if (!shop) return res.status(400).json({ error: 'shop param required' });
+    if (token !== devSecret) return res.status(401).json({ error: 'Unauthorized' });
 
     const install = await authService.beginInstall(shop);
     return res.redirect(install.redirectUrl);
