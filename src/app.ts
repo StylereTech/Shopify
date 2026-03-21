@@ -187,6 +187,15 @@ export function createApp(config?: {
     return res.redirect(install.redirectUrl);
   });
 
+  // Dev install bypass — skips HMAC check for development stores
+  app.get('/shopify/dev-install', async (req, res) => {
+    const shop = req.query.shop as string | undefined;
+    if (!shop) return res.status(400).json({ error: 'shop param required' });
+
+    const install = await authService.beginInstall(shop);
+    return res.redirect(install.redirectUrl);
+  });
+
   app.get('/shopify/auth/callback', async (req, res) => {
     try {
       await authService.completeCallback(req.query as Record<string, string | undefined>, req.header('x-request-id') ?? undefined);
