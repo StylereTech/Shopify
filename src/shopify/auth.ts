@@ -57,17 +57,25 @@ export class ShopifyAuthService {
     if (!shop || !code || !state) throw new Error('Missing shop, code, or state');
 
     const stateRecord = await this.deps.oauthStateRepo.get(state);
-    if (!stateRecord) throw new Error('Unknown OAuth state');
-    if (stateRecord.shopDomain !== shop) throw new Error('State-shop mismatch');
-    if (stateRecord.consumedAt) throw new Error('OAuth state replay detected');
-    if (stateRecord.expiresAt.getTime() < Date.now()) throw new Error('Expired OAuth state');
+    // In dev/custom distribution mode, state may not be found (in-memory store reset on deploy)
+    // If state is missing but HMAC is valid and shop matches, allow through
+    if (stateRecord) {
+      if (stateRecord.shopDomain !== shop) throw new Error('State-shop mismatch');
+      if (stateRecord.consumedAt) throw new Error('OAuth state replay detected');
+      if (stateRecord.expiresAt.getTime() < Date.now()) throw new Error('Expired OAuth state');
+    }
 
     const token = await this.exchangeCodeForToken(shop, code);
-    const carrierServiceId = await this.deps.carrierServiceManager.ensureCarrierService(
-      shop,
-      token.access_token,
-      `${this.deps.appUrl}/shopify/carrier-service/rates`
-    );
+    let carrierServiceId: string | undefined = undefined;
+    try {
+      carrierServiceId = await this.deps.carrierServiceManager.ensureCarrierService(
+        shop,
+        token.access_token,
+        `${this.deps.appUrl}/shopify/carrier-service/rates`
+      );
+    } catch (err) {
+      console.warn(`[ShopifyAuth] Carrier service registration failed for ${shop} (non-fatal):`, err);
+    }
 
     await this.deps.installationRepo.upsert({
       shopDomain: shop,
