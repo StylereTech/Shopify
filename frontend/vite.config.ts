@@ -16,6 +16,7 @@ export default defineConfig({
       }
     }
   },
+  base: '/shopify/',
   build: {
     outDir: 'dist',
     sourcemap: true,

@@ -84,6 +84,16 @@ export const Confirmation: React.FC = () => {
           >
             Track My Order
           </Button>
+          {currentOrder?.doordashTrackingUrl && (
+            <a
+              href={currentOrder.doordashTrackingUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full py-4 rounded-2xl text-center text-base font-bold bg-[#F97316] text-white"
+            >
+              Open Live DoorDash Map →
+            </a>
+          )}
           <Button
             fullWidth
             size="lg"

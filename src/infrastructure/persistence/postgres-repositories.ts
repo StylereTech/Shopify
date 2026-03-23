@@ -8,6 +8,169 @@ import {
   ShopInstallation,
   WebhookEvent
 } from '../../domain/types.js';
+
+// ─── Storree Direct-Link Order Types ────────────────────────────────────────
+
+export interface StorreeOrder {
+  id: string;
+  serviceType: string;
+  status: string;
+  pickupAddress: Record<string, unknown>;
+  dropoffAddress: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  contact: Record<string, unknown>;
+  notes?: string;
+  pricing: Record<string, unknown>;
+  paymentIntentId?: string;
+  stripePaymentIntentId?: string;
+  paymentStatus: string;
+  doordashDeliveryId?: string;
+  doordashExternalId?: string;
+  doordashTrackingUrl?: string;
+  dispatchId?: string;
+  merchantNotified: boolean;
+  shopDomain?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StorreeOrderRepository {
+  create(order: StorreeOrder): Promise<void>;
+  update(order: StorreeOrder): Promise<void>;
+  getById(id: string): Promise<StorreeOrder | undefined>;
+  getByPaymentIntentId(piId: string): Promise<StorreeOrder | undefined>;
+  listActive(): Promise<StorreeOrder[]>;
+}
+
+// ─── In-Memory Fallback (for tests) ─────────────────────────────────────────
+
+export class InMemoryStorreeOrderRepository implements StorreeOrderRepository {
+  private readonly store = new Map<string, StorreeOrder>();
+
+  async create(order: StorreeOrder): Promise<void> {
+    this.store.set(order.id, { ...order });
+  }
+  async update(order: StorreeOrder): Promise<void> {
+    this.store.set(order.id, { ...order });
+  }
+  async getById(id: string): Promise<StorreeOrder | undefined> {
+    return this.store.get(id);
+  }
+  async getByPaymentIntentId(piId: string): Promise<StorreeOrder | undefined> {
+    for (const o of this.store.values()) {
+      if (o.stripePaymentIntentId === piId || o.paymentIntentId === piId) return o;
+    }
+    return undefined;
+  }
+  async listActive(): Promise<StorreeOrder[]> {
+    const activeStatuses = ['pending', 'confirmed', 'assigned', 'picked_up', 'in_transit'];
+    return Array.from(this.store.values())
+      .filter((o) => activeStatuses.includes(o.status))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+}
+
+// ─── Postgres Implementation ─────────────────────────────────────────────────
+
+export class PostgresStorreeOrderRepository implements StorreeOrderRepository {
+  constructor(private readonly pool: Pool) {}
+
+  private rowToOrder(row: Record<string, unknown>): StorreeOrder {
+    return {
+      id: row.id as string,
+      serviceType: row.service_type as string,
+      status: row.status as string,
+      pickupAddress: typeof row.pickup_address === 'string' ? JSON.parse(row.pickup_address) : row.pickup_address as Record<string, unknown>,
+      dropoffAddress: typeof row.dropoff_address === 'string' ? JSON.parse(row.dropoff_address) : row.dropoff_address as Record<string, unknown>,
+      items: typeof row.items === 'string' ? JSON.parse(row.items) : row.items as Array<Record<string, unknown>>,
+      contact: typeof row.contact === 'string' ? JSON.parse(row.contact) : row.contact as Record<string, unknown>,
+      notes: (row.notes as string | null) ?? undefined,
+      pricing: typeof row.pricing === 'string' ? JSON.parse(row.pricing) : row.pricing as Record<string, unknown>,
+      paymentIntentId: (row.payment_intent_id as string | null) ?? undefined,
+      stripePaymentIntentId: (row.stripe_payment_intent_id as string | null) ?? undefined,
+      paymentStatus: row.payment_status as string,
+      doordashDeliveryId: (row.doordash_delivery_id as string | null) ?? undefined,
+      doordashExternalId: (row.doordash_external_id as string | null) ?? undefined,
+      doordashTrackingUrl: (row.doordash_tracking_url as string | null) ?? undefined,
+      dispatchId: (row.dispatch_id as string | null) ?? undefined,
+      merchantNotified: row.merchant_notified as boolean,
+      shopDomain: (row.shop_domain as string | null) ?? undefined,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
+  }
+
+  async create(order: StorreeOrder): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO storree_orders
+        (id, service_type, status, pickup_address, dropoff_address, items, contact, notes,
+         pricing, payment_intent_id, stripe_payment_intent_id, payment_status,
+         doordash_delivery_id, doordash_external_id, doordash_tracking_url, dispatch_id,
+         merchant_notified, shop_domain, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [
+        order.id, order.serviceType, order.status,
+        JSON.stringify(order.pickupAddress), JSON.stringify(order.dropoffAddress),
+        JSON.stringify(order.items), JSON.stringify(order.contact),
+        order.notes ?? null, JSON.stringify(order.pricing),
+        order.paymentIntentId ?? null, order.stripePaymentIntentId ?? null,
+        order.paymentStatus,
+        order.doordashDeliveryId ?? null, order.doordashExternalId ?? null,
+        order.doordashTrackingUrl ?? null, order.dispatchId ?? null,
+        order.merchantNotified, order.shopDomain ?? null,
+        order.createdAt, order.updatedAt,
+      ]
+    );
+  }
+
+  async update(order: StorreeOrder): Promise<void> {
+    await this.pool.query(
+      `UPDATE storree_orders SET
+        service_type=$2, status=$3, pickup_address=$4, dropoff_address=$5,
+        items=$6, contact=$7, notes=$8, pricing=$9,
+        payment_intent_id=$10, stripe_payment_intent_id=$11, payment_status=$12,
+        doordash_delivery_id=$13, doordash_external_id=$14, doordash_tracking_url=$15,
+        dispatch_id=$16, merchant_notified=$17, shop_domain=$18, updated_at=$19
+       WHERE id=$1`,
+      [
+        order.id, order.serviceType, order.status,
+        JSON.stringify(order.pickupAddress), JSON.stringify(order.dropoffAddress),
+        JSON.stringify(order.items), JSON.stringify(order.contact),
+        order.notes ?? null, JSON.stringify(order.pricing),
+        order.paymentIntentId ?? null, order.stripePaymentIntentId ?? null,
+        order.paymentStatus,
+        order.doordashDeliveryId ?? null, order.doordashExternalId ?? null,
+        order.doordashTrackingUrl ?? null, order.dispatchId ?? null,
+        order.merchantNotified, order.shopDomain ?? null,
+        order.updatedAt,
+      ]
+    );
+  }
+
+  async getById(id: string): Promise<StorreeOrder | undefined> {
+    const { rows } = await this.pool.query('SELECT * FROM storree_orders WHERE id=$1', [id]);
+    if (!rows[0]) return undefined;
+    return this.rowToOrder(rows[0]);
+  }
+
+  async getByPaymentIntentId(piId: string): Promise<StorreeOrder | undefined> {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM storree_orders WHERE stripe_payment_intent_id=$1 OR payment_intent_id=$1 LIMIT 1',
+      [piId]
+    );
+    if (!rows[0]) return undefined;
+    return this.rowToOrder(rows[0]);
+  }
+
+  async listActive(): Promise<StorreeOrder[]> {
+    const { rows } = await this.pool.query(
+      `SELECT * FROM storree_orders
+       WHERE status IN ('pending','confirmed','assigned','picked_up','in_transit')
+       ORDER BY created_at DESC`
+    );
+    return rows.map((r) => this.rowToOrder(r));
+  }
+}
 import {
   AuditLogRepository,
   DeliveryJobRepository,

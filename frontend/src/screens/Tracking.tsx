@@ -120,24 +120,41 @@ export const Tracking: React.FC = () => {
               </Card>
             )}
 
-            {/* Map placeholder */}
+            {/* Map / DoorDash tracking */}
             <Card padding="none" className="overflow-hidden">
-              <div className="bg-gradient-to-br from-[#FAFAF9] to-[#FED7AA]/20 h-48 flex flex-col items-center justify-center gap-3 border-b border-[#E7E5E4]">
-                <div className="w-14 h-14 rounded-full bg-[#F97316]/10 flex items-center justify-center">
-                  <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#F97316" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <circle cx="12" cy="11" r="3" />
-                  </svg>
-                </div>
-                <p className="text-sm text-[#78716C] font-medium">Live map — courier in motion</p>
-                {data.status === 'in_transit' && (
-                  <div className="flex items-center gap-1.5 text-xs text-[#F97316] font-medium">
+              {(data as { doordashTrackingUrl?: string }).doordashTrackingUrl ? (
+                <div className="p-5 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-[#1C1917]">
                     <div className="w-2 h-2 rounded-full bg-[#F97316] animate-pulse" />
-                    Style.re courier is on the way
+                    Live courier tracking available
                   </div>
-                )}
-              </div>
+                  <a
+                    href={(data as { doordashTrackingUrl?: string }).doordashTrackingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-3 rounded-xl bg-[#F97316] text-white text-center text-sm font-bold"
+                  >
+                    Open Live Map →
+                  </a>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-br from-[#FAFAF9] to-[#FED7AA]/20 h-48 flex flex-col items-center justify-center gap-3 border-b border-[#E7E5E4]">
+                  <div className="w-14 h-14 rounded-full bg-[#F97316]/10 flex items-center justify-center">
+                    <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#F97316" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <circle cx="12" cy="11" r="3" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-[#78716C] font-medium">Live map — courier in motion</p>
+                  {data.status === 'in_transit' && (
+                    <div className="flex items-center gap-1.5 text-xs text-[#F97316] font-medium">
+                      <div className="w-2 h-2 rounded-full bg-[#F97316] animate-pulse" />
+                      Style.re courier is on the way
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
 
             {/* Progress Bar */}

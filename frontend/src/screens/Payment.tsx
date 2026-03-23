@@ -34,7 +34,7 @@ const PaymentForm: React.FC = () => {
   const stripe = useStripe();
   const elements = useElements();
   const navigate = useNavigate();
-  const { draft, setOrderId, setPaymentIntentId, setCurrentOrder } = useOrderStore();
+  const { draft, currentOrder, setOrderId, setPaymentIntentId, setCurrentOrder } = useOrderStore();
 
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setLocalPaymentIntentId] = useState<string>('');
@@ -100,8 +100,12 @@ const PaymentForm: React.FC = () => {
       }
 
       if (paymentIntent?.status === 'succeeded') {
-        // Confirm on backend
-        await api.confirmPayment(paymentIntentId, draft.orderId!);
+        // Confirm on backend — triggers DoorDash dispatch + merchant SMS
+        const confirmResult = await api.confirmPayment(paymentIntentId, draft.orderId!);
+        // Store DoorDash tracking URL if dispatch succeeded
+        if ('trackingUrl' in confirmResult && confirmResult.trackingUrl && currentOrder) {
+          setCurrentOrder({ ...currentOrder, doordashTrackingUrl: confirmResult.trackingUrl as string });
+        }
         setSuccess(true);
         setTimeout(() => navigate('/confirmation'), 1000);
       }

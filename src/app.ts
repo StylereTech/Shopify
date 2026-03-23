@@ -153,6 +153,7 @@ export function createApp(config?: {
   app.get('/health', (_req, res) => res.json({ ok: true }));
 
   // ── Style.re Customer-Facing API ──────────────────────────────────────────
+  // Note: Stripe webhook needs rawBody, must be before JSON parser for /api/payments/stripe-webhook
   app.use('/api', createOrdersRouter());
   app.use('/api', createPaymentsRouter());
   app.use('/api', createStoresRouter());
@@ -161,9 +162,11 @@ export function createApp(config?: {
   app.get('/health/ready', async (_req, res) => {
     const dbOk = config?.readiness?.db ? await config.readiness.db() : true;
     const redisOk = config?.readiness?.redis ? await config.readiness.redis() : true;
-    const storreeOk = await storreeClient.checkConnectivity();
+    // Dispatch connectivity is best-effort — not a hard dependency for readiness
+    const storreeOk = await storreeClient.checkConnectivity().catch(() => false);
 
-    if (!dbOk || !redisOk || !storreeOk) {
+    // Only DB and Redis are hard dependencies for readiness
+    if (!dbOk || !redisOk) {
       return res.status(503).json({ ok: false, dbOk, redisOk, storreeOk });
     }
 
@@ -177,6 +180,44 @@ export function createApp(config?: {
     return res.json(deps.metrics.snapshot());
   });
 
+  /**
+   * Checkout integration info endpoint
+   * Returns which checkout mechanism is available based on plan
+   */
+  app.get('/shopify/checkout-capability', async (req, res) => {
+    const shopDomain = req.query.shop as string | undefined;
+    if (!shopDomain) return res.status(400).json({ error: 'shop required' });
+
+    const installation = await deps.shops.getByShopDomain(shopDomain);
+    if (!installation) {
+      return res.json({
+        mechanism: 'direct_link',
+        carrierServiceAvailable: false,
+        reason: 'App not installed',
+        instructions: 'Install the app first via /shopify/install?shop=<domain>',
+        directFlowUrl: `${config?.appUrl ?? 'https://api-production-653e.up.railway.app'}/shopify/order-flow?shop=${shopDomain}`,
+      });
+    }
+
+    const token = tokenVault.decrypt(installation.encryptedAccessToken);
+    const prereq = await carrierServiceManager.checkPrerequisites(shopDomain, token);
+    const carrierServiceAvailable = prereq.partnerDevelopment === true || prereq.shopifyPlus === true;
+
+    return res.json({
+      mechanism: carrierServiceAvailable ? 'carrier_service' : 'direct_link',
+      carrierServiceAvailable,
+      plan: prereq.planName,
+      shopifyPlus: prereq.shopifyPlus,
+      partnerDevelopment: prereq.partnerDevelopment,
+      reason: carrierServiceAvailable
+        ? 'Store is eligible for carrier service injection into checkout'
+        : 'Store plan does not support carrier service. Use direct link flow instead.',
+      directFlowUrl: `https://stylere.app/shopify?shop=${shopDomain}`,
+      carrierServiceCallbackUrl: `${config?.appUrl ?? 'https://api-production-653e.up.railway.app'}/shopify/carrier-service/rates`,
+      note: 'Carrier services require Shopify Advanced or Plus plan, or Partner Development stores.',
+    });
+  });
+
   app.get('/shopify/install', async (req, res) => {
     const query = req.query as Record<string, string | undefined>;
     if (!authService.verifyInstallQuery(query) || !query.shop) {
@@ -185,6 +226,13 @@ export function createApp(config?: {
 
     const install = await authService.beginInstall(query.shop);
     return res.redirect(install.redirectUrl);
+  });
+
+  // Merchant dashboard redirect — when Shopify loads the app, redirect to frontend
+  app.get('/shopify/dashboard', async (req, res) => {
+    const shop = req.query.shop as string | undefined;
+    const frontendUrl = 'https://stylere-shopify-delivery-7fkzbujzs-styleres-projects.vercel.app/merchant';
+    return res.redirect(shop ? `${frontendUrl}?shop=${shop}` : frontendUrl);
   });
 
   // Dev install bypass — protected by dev secret token
@@ -202,10 +250,11 @@ export function createApp(config?: {
   app.get('/shopify/auth/callback', async (req, res) => {
     try {
       await authService.completeCallback(req.query as Record<string, string | undefined>, req.header('x-request-id') ?? undefined);
-      return res.status(200).send('Storree app installed successfully.');
+      return res.status(200).send('Storree app installed successfully. ✅');
     } catch (error) {
-      deps.logger.error('OAuth callback failed', { error: String(error), correlationId: req.header('x-request-id') });
-      return res.status(401).json({ error: 'OAuth failed' });
+      const msg = String(error);
+      deps.logger.error('OAuth callback failed', { error: msg, query: JSON.stringify(req.query), correlationId: req.header('x-request-id') });
+      return res.status(401).json({ error: 'OAuth failed', reason: msg });
     }
   });
 

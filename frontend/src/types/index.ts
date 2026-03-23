@@ -61,6 +61,8 @@ export interface Order {
   notes?: string;
   pricing: PricingQuote;
   paymentIntentId?: string;
+  doordashTrackingUrl?: string;
+  doordashExternalId?: string;
   createdAt: string;
   updatedAt: string;
   estimatedDeliveryTime?: string;
@@ -73,6 +75,7 @@ export interface TrackingStatus {
   driverPhone?: string;
   currentLocation?: { lat: number; lng: number };
   estimatedMinutes?: number;
+  doordashTrackingUrl?: string;
   timeline: TrackingEvent[];
 }
 

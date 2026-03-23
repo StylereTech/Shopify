@@ -10,16 +10,22 @@ import {
   PostgresMerchantConfigRepository,
   PostgresOAuthStateRepository,
   PostgresShopInstallationRepository,
-  PostgresWebhookEventRepository
+  PostgresWebhookEventRepository,
+  PostgresStorreeOrderRepository
 } from './infrastructure/persistence/postgres-repositories.js';
+import { setStorreeOrderRepository } from './api/orders.js';
 import { RedisDispatchQueue } from './infrastructure/queue/dispatch-queue.js';
 import { ConsoleLogger } from './observability/logger.js';
 import { MetricsRegistry } from './observability/metrics.js';
-import { StorreeApiClient } from './infrastructure/storree/storree-client.js';
+import { StorreeApiClient, FakeStorreeClient } from './infrastructure/storree/storree-client.js';
+import { DoorDashDriveClient, DoorDashStorreeAdapter } from './infrastructure/doordash/doordash-client.js';
 import { runStartupChecks } from './operations/startup-checks.js';
 
 const pool = createPostgresPool(env.DATABASE_URL);
 const redis = new Redis(env.REDIS_URL);
+
+// Wire Postgres order repository for customer-facing direct-link flow
+setStorreeOrderRepository(new PostgresStorreeOrderRepository(pool));
 const logger = new ConsoleLogger();
 const metrics = new MetricsRegistry();
 
@@ -37,12 +43,38 @@ const deps = {
   metrics
 };
 
-const storreeClient = new StorreeApiClient(
-  env.STORREE_API_BASE_URL,
-  env.STORREE_API_KEY,
-  env.STORREE_TIMEOUT_MS,
-  env.STORREE_MAX_RETRIES
-);
+// ─── Dispatch Provider Selection ─────────────────────────────────────────────
+// DISPATCH_PROVIDER=doordash (default prod) | storree | fake
+let storreeClient;
+if (env.DISPATCH_PROVIDER === 'doordash' && env.DOORDASH_DEVELOPER_ID && env.DOORDASH_KEY_ID && env.DOORDASH_SIGNING_SECRET) {
+  const dd = new DoorDashDriveClient({
+    developerId: env.DOORDASH_DEVELOPER_ID,
+    keyId: env.DOORDASH_KEY_ID,
+    signingSecret: env.DOORDASH_SIGNING_SECRET,
+    baseUrl: env.DOORDASH_BASE_URL,
+    timeoutMs: 10_000,
+  });
+  storreeClient = new DoorDashStorreeAdapter({
+    doordash: dd,
+    merchantPickupAddress: env.DEFAULT_PICKUP_ADDRESS ?? '1 Main St, Dallas, TX 75201',
+    merchantPickupPhone: env.DEFAULT_PICKUP_PHONE,
+    merchantPickupName: env.DEFAULT_PICKUP_NAME ?? 'Style.re Store',
+    twilioPhone: env.TWILIO_FROM_NUMBER,
+    googleMapsKey: env.GOOGLE_MAPS_API_KEY,
+  });
+  logger.info('Dispatch provider: DoorDash Drive');
+} else if (env.DISPATCH_PROVIDER === 'storree') {
+  storreeClient = new StorreeApiClient(
+    env.STORREE_API_BASE_URL!,
+    env.STORREE_API_KEY!,
+    env.STORREE_TIMEOUT_MS,
+    env.STORREE_MAX_RETRIES
+  );
+  logger.info('Dispatch provider: Storree API');
+} else {
+  storreeClient = new FakeStorreeClient();
+  logger.info('Dispatch provider: Fake (no credentials configured)');
+}
 
 const app = createApp({
   shopifyApiKey: env.SHOPIFY_API_KEY,

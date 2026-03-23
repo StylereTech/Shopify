@@ -1,21 +1,27 @@
 name = "Storree Local Delivery"
-client_id = "${SHOPIFY_API_KEY}"
-application_url = "${APP_URL}"
+client_id = "c2af2e125a8ffa0ae080ed4b06e1daf9"
+application_url = "https://api-production-653e.up.railway.app/shopify/dashboard"
 embedded = false
 
 [access_scopes]
+# write_shipping required for carrier service registration (Advanced/Plus plan)
+# read_orders required for order webhook processing
+# read_locations for merchant pickup location detection
 scopes = "read_orders,write_shipping,read_locations"
 
 [auth]
-redirect_urls = ["${APP_URL}/shopify/auth/callback"]
+redirect_urls = [
+  "https://api-production-653e.up.railway.app/shopify/auth/callback",
+  "https://stylere.app/shopify/auth/callback"
+]
 
 [webhooks]
 api_version = "2025-01"
 
   [[webhooks.subscriptions]]
   topics = ["orders/paid"]
-  uri = "/shopify/webhooks/orders/paid"
+  uri = "https://api-production-653e.up.railway.app/shopify/webhooks/orders/paid"
 
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-  uri = "/shopify/webhooks/compliance"
+  uri = "https://api-production-653e.up.railway.app/shopify/webhooks/compliance"

@@ -9,6 +9,7 @@ import { Confirmation } from './screens/Confirmation';
 import { Tracking } from './screens/Tracking';
 import { Chat } from './screens/Chat';
 import { OrderHistory } from './screens/OrderHistory';
+import { MerchantDashboard } from './screens/MerchantDashboard';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
 const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename="/shopify">
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/address" element={<AddressForm />} />
@@ -32,6 +33,7 @@ const App: React.FC = () => {
           <Route path="/tracking/:orderId" element={<Tracking />} />
           <Route path="/chat/:orderId" element={<Chat />} />
           <Route path="/orders" element={<OrderHistory />} />
+          <Route path="/merchant" element={<MerchantDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

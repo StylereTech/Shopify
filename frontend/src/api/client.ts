@@ -91,7 +91,7 @@ export const api = {
     }),
 
   confirmPayment: (paymentIntentId: string, orderId: string) =>
-    request<{ success: boolean; orderId: string }>(
+    request<{ success: boolean; orderId: string; dispatched?: boolean; trackingUrl?: string }>(
       `${BASE_URL}/payments/confirm`,
       {
         method: 'POST',
