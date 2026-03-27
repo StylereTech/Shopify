@@ -10,6 +10,14 @@ import { Tracking } from './screens/Tracking';
 import { Chat } from './screens/Chat';
 import { OrderHistory } from './screens/OrderHistory';
 import { MerchantDashboard } from './screens/MerchantDashboard';
+import { MerchantLanding } from './screens/MerchantLanding';
+import { PrivacyPolicy } from './screens/PrivacyPolicy';
+import { TermsOfService } from './screens/TermsOfService';
+import { SupportPage } from './screens/SupportPage';
+import { MerchantPricing } from './screens/merchant/MerchantPricing';
+import { MerchantSignup } from './screens/merchant/MerchantSignup';
+import { MerchantLogin } from './screens/merchant/MerchantLogin';
+import { MerchantOrderDetail } from './screens/merchant/MerchantOrderDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,11 +28,21 @@ const queryClient = new QueryClient({
   },
 });
 
+// Protected route — checks for JWT in localStorage
+const ProtectedMerchantRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const token = localStorage.getItem('merchant_token');
+  if (!token) {
+    return <Navigate to="/merchant/login" replace />;
+  }
+  return <>{children}</>;
+};
+
 const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter basename="/shopify">
         <Routes>
+          {/* Customer delivery flow */}
           <Route path="/" element={<Landing />} />
           <Route path="/address" element={<AddressForm />} />
           <Route path="/summary" element={<OrderSummary />} />
@@ -33,7 +51,39 @@ const App: React.FC = () => {
           <Route path="/tracking/:orderId" element={<Tracking />} />
           <Route path="/chat/:orderId" element={<Chat />} />
           <Route path="/orders" element={<OrderHistory />} />
-          <Route path="/merchant" element={<MerchantDashboard />} />
+
+          {/* Merchant landing (legacy) */}
+          <Route path="/merchant-landing" element={<MerchantLanding />} />
+
+          {/* Merchant platform — public */}
+          <Route path="/merchant" element={<MerchantLanding />} />
+          <Route path="/merchant/pricing" element={<MerchantPricing />} />
+          <Route path="/merchant/signup" element={<MerchantSignup />} />
+          <Route path="/merchant/login" element={<MerchantLogin />} />
+
+          {/* Merchant platform — protected */}
+          <Route
+            path="/merchant/dashboard"
+            element={
+              <ProtectedMerchantRoute>
+                <MerchantDashboard />
+              </ProtectedMerchantRoute>
+            }
+          />
+          <Route
+            path="/merchant/orders/:id"
+            element={
+              <ProtectedMerchantRoute>
+                <MerchantOrderDetail />
+              </ProtectedMerchantRoute>
+            }
+          />
+
+          {/* Legal */}
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/support" element={<SupportPage />} />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

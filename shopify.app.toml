@@ -23,5 +23,9 @@ api_version = "2025-01"
   uri = "https://api-production-653e.up.railway.app/shopify/webhooks/orders/paid"
 
   [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "https://api-production-653e.up.railway.app/shopify/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
   uri = "https://api-production-653e.up.railway.app/shopify/webhooks/compliance"

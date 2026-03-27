@@ -23,12 +23,19 @@ const CARD_ELEMENT_OPTIONS = {
       fontSize: '16px',
       color: '#1C1917',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif',
-      '::placeholder': { color: '#A8A29E' },
-      iconColor: '#F97316',
+      '::placeholder': { color: '#C4BFB9' },
+      iconColor: '#E8621A',
     },
     invalid: { color: '#EF4444', iconColor: '#EF4444' },
   },
 };
+
+const LockIcon = () => (
+  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0110 0v4" />
+  </svg>
+);
 
 const PaymentForm: React.FC = () => {
   const stripe = useStripe();
@@ -48,11 +55,8 @@ const PaymentForm: React.FC = () => {
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
 
   useEffect(() => {
-    // 1. Create order on backend
-    // 2. Get payment intent
     const initialize = async () => {
       try {
-        // Create order
         let orderId = draft.orderId;
         if (!orderId) {
           const order = await api.createOrder(draft);
@@ -61,7 +65,6 @@ const PaymentForm: React.FC = () => {
           setCurrentOrder(order);
         }
 
-        // Get payment intent
         const pi = await api.createPaymentIntent(orderId, total);
         setClientSecret(pi.clientSecret);
         setLocalPaymentIntentId(pi.paymentIntentId);
@@ -100,9 +103,7 @@ const PaymentForm: React.FC = () => {
       }
 
       if (paymentIntent?.status === 'succeeded') {
-        // Confirm on backend — triggers DoorDash dispatch + merchant SMS
         const confirmResult = await api.confirmPayment(paymentIntentId, draft.orderId!);
-        // Store DoorDash tracking URL if dispatch succeeded
         if ('trackingUrl' in confirmResult && confirmResult.trackingUrl && currentOrder) {
           setCurrentOrder({ ...currentOrder, doordashTrackingUrl: confirmResult.trackingUrl as string });
         }
@@ -117,62 +118,73 @@ const PaymentForm: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
-        <div className="w-8 h-8 border-2 border-[#F97316] border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-[#78716C]">Preparing secure payment…</p>
+      <div className="flex flex-col items-center justify-center py-24 gap-4">
+        <div className="w-10 h-10 border-2 border-[#E8621A] border-t-transparent rounded-full animate-spin" />
+        <p className="text-[14px] text-[#78716C]">Preparing secure payment…</p>
       </div>
     );
   }
 
   if (success) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-          <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#22C55E" strokeWidth={2.5}>
+      <div className="flex flex-col items-center justify-center py-24 gap-5">
+        <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center shadow-[0_4px_20px_rgba(34,197,94,0.15)]">
+          <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="#22C55E" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <p className="text-lg font-semibold text-[#1C1917]">Payment successful!</p>
-        <p className="text-sm text-[#78716C]">Redirecting…</p>
+        <div className="text-center">
+          <p className="text-xl font-bold text-[#1C1917] mb-1">Payment confirmed</p>
+          <p className="text-[14px] text-[#78716C]">Dispatching your courier…</p>
+        </div>
       </div>
     );
   }
 
   return (
     <form onSubmit={handlePay} className="px-5 py-6 flex flex-col gap-5">
+
       {/* Order total */}
-      <Card className="bg-[#FED7AA]/20 border-[#F97316]/30">
-        <div className="flex items-center justify-between">
-          <span className="text-[#78716C] text-sm">Total to pay</span>
-          <span className="text-2xl font-bold text-[#F97316]">{formatMoney(total)}</span>
+      <div className="bg-[#1C1917] rounded-3xl p-5 flex items-center justify-between">
+        <div>
+          <p className="text-white/50 text-[12px] uppercase tracking-wider mb-1">Total</p>
+          <p className="text-3xl font-bold text-white tracking-tight">{formatMoney(total)}</p>
         </div>
-      </Card>
+        <div className="text-right">
+          <p className="text-white/50 text-[12px]">Same-hour delivery</p>
+          <p className="text-white/70 text-[13px] font-medium mt-0.5">Style.re</p>
+        </div>
+      </div>
 
       {/* Card Input */}
       <Card>
-        <h2 className="font-semibold text-[#1C1917] mb-4">Card Details</h2>
-        <div className="border border-[#E7E5E4] rounded-xl p-4 focus-within:ring-2 focus-within:ring-[#F97316] focus-within:border-transparent transition-all">
+        <h2 className="font-bold text-[#1C1917] text-[15px] mb-4">Card Details</h2>
+        <div className="border border-[#EEEBE8] rounded-2xl p-4 focus-within:border-[#E8621A] focus-within:ring-2 focus-within:ring-[#E8621A]/10 transition-all">
           <CardElement options={CARD_ELEMENT_OPTIONS} />
         </div>
-        <div className="mt-3 flex items-center gap-2 text-xs text-[#78716C]">
-          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0110 0v4" />
-          </svg>
-          Encrypted & secure via Stripe
+        <div className="mt-3 flex items-center gap-2 text-[12px] text-[#A8A29E]">
+          <LockIcon />
+          <span>256-bit encryption · Powered by Stripe</span>
         </div>
       </Card>
 
+      {/* Trust badges */}
+      <div className="flex items-center justify-center gap-6">
+        {['Visa', 'Mastercard', 'Amex', 'Discover'].map(b => (
+          <span key={b} className="text-[11px] font-semibold text-[#C4BFB9] uppercase tracking-wide">{b}</span>
+        ))}
+      </div>
+
       {/* Error */}
       {error && (
-        <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl p-4">
           <svg className="flex-shrink-0 mt-0.5" width="16" height="16" fill="none" viewBox="0 0 24 24"
             stroke="#EF4444" strokeWidth={2}>
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-[13px] text-red-600">{error}</p>
         </div>
       )}
 
@@ -186,8 +198,9 @@ const PaymentForm: React.FC = () => {
         {paying ? 'Processing…' : `Pay ${formatMoney(total)}`}
       </Button>
 
-      <p className="text-center text-xs text-[#78716C] pb-2">
-        By paying, you agree to Style.re's Terms of Service
+      <p className="text-center text-[11px] text-[#C4BFB9]">
+        By paying, you agree to Style.re's{' '}
+        <span className="text-[#78716C] underline underline-offset-2 cursor-pointer">Terms of Service</span>
       </p>
     </form>
   );
@@ -195,7 +208,7 @@ const PaymentForm: React.FC = () => {
 
 export const Payment: React.FC = () => {
   return (
-    <AppShell title="Payment" showBack showNav={false}>
+    <AppShell title="Secure Payment" showBack showNav={false} step={3} totalSteps={4}>
       <Elements stripe={stripePromise}>
         <PaymentForm />
       </Elements>

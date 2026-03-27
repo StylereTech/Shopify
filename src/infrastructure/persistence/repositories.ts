@@ -28,6 +28,7 @@ export interface IdempotencyRepository {
 export interface ShopInstallationRepository {
   upsert(installation: ShopInstallation): Promise<void>;
   getByShopDomain(shopDomain: string): Promise<ShopInstallation | undefined>;
+  deleteByShopDomain(shopDomain: string): Promise<void>;
 }
 
 export interface OAuthStateRepository {

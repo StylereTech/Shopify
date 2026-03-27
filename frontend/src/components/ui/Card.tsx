@@ -19,19 +19,22 @@ export const Card: React.FC<CardProps> = ({
 }) => {
   const paddings = {
     none: '',
-    sm: 'p-3',
+    sm: 'p-4',
     md: 'p-5',
-    lg: 'p-7',
+    lg: 'p-6',
   };
 
   return (
     <div
       onClick={onClick}
       className={`
-        bg-white rounded-2xl border transition-all duration-150
+        bg-white rounded-3xl transition-all duration-150
         ${paddings[padding]}
-        ${hoverable || onClick ? 'cursor-pointer hover:shadow-md hover:border-[#F97316]/40' : 'shadow-sm'}
-        ${selected ? 'border-[#F97316] ring-2 ring-[#F97316]/20 shadow-md' : 'border-[#E7E5E4]'}
+        ${hoverable || onClick ? 'cursor-pointer active:scale-[0.99]' : ''}
+        ${selected
+          ? 'border-2 border-[#E8621A] shadow-[0_4px_20px_rgba(232,98,26,0.12)]'
+          : 'shadow-[0_2px_12px_rgba(28,25,23,0.06)]'
+        }
         ${className}
       `}
     >

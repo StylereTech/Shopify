@@ -47,6 +47,7 @@ export class InMemoryShopInstallationRepository implements ShopInstallationRepos
   private readonly shops = new Map<string, ShopInstallation>();
   async upsert(installation: ShopInstallation): Promise<void> { this.shops.set(installation.shopDomain, installation); }
   async getByShopDomain(shopDomain: string): Promise<ShopInstallation | undefined> { return this.shops.get(shopDomain); }
+  async deleteByShopDomain(shopDomain: string): Promise<void> { this.shops.delete(shopDomain); }
 }
 
 export class InMemoryOAuthStateRepository implements OAuthStateRepository {

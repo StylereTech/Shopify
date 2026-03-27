@@ -298,6 +298,9 @@ export class PostgresShopInstallationRepository implements ShopInstallationRepos
       carrierServiceId: row.carrier_service_id ?? undefined
     };
   }
+  async deleteByShopDomain(shopDomain: string): Promise<void> {
+    await this.pool.query('DELETE FROM shops WHERE shop_domain=$1', [shopDomain]);
+  }
 }
 
 export class PostgresOAuthStateRepository implements OAuthStateRepository {

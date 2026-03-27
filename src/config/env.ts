@@ -41,6 +41,11 @@ const schema = z.object({
   TWILIO_FROM_NUMBER: z.string().optional(),
   // Dispatch provider (doordash | storree | fake)
   DISPATCH_PROVIDER: z.enum(['doordash', 'storree', 'fake']).default('doordash'),
+  // Merchant platform
+  MERCHANT_JWT_SECRET: z.string().optional().default('dev-merchant-jwt-secret-change-in-production'),
+  MERCHANT_STRIPE_PRICE_ACCESS: z.string().optional(),
+  MERCHANT_STRIPE_PRICE_GROWTH: z.string().optional(),
+  FRONTEND_URL: z.string().optional().default('https://stylere-shopify-delivery.vercel.app'),
 });
 
 export const env = schema.parse(process.env);

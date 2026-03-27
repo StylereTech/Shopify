@@ -1,6 +1,7 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { createOrdersRouter, createPaymentsRouter, createStoresRouter } from './api/orders.js';
+import { createMerchantRouter } from './api/merchant.js';
 import { quoteDeliveryOptions } from './domain/pricing.js';
 import { DispatchOrchestrator } from './domain/dispatch-orchestrator.js';
 import { mapProviderStatus, isStatusRegression, isValidTransition } from './domain/order-lifecycle.js';
@@ -157,6 +158,8 @@ export function createApp(config?: {
   app.use('/api', createOrdersRouter());
   app.use('/api', createPaymentsRouter());
   app.use('/api', createStoresRouter());
+  // ── Merchant Platform API ─────────────────────────────────────────────────
+  app.use('/api', createMerchantRouter());
   // ─────────────────────────────────────────────────────────────────────────
 
   app.get('/health/ready', async (_req, res) => {
@@ -235,17 +238,19 @@ export function createApp(config?: {
     return res.redirect(shop ? `${frontendUrl}?shop=${shop}` : frontendUrl);
   });
 
-  // Dev install bypass — protected by dev secret token
-  app.get('/shopify/dev-install', async (req, res) => {
-    const shop = req.query.shop as string | undefined;
-    const token = req.query.token as string | undefined;
-    const devSecret = config?.shopifyApiSecret ?? 'dev-secret';
-    if (!shop) return res.status(400).json({ error: 'shop param required' });
-    if (token !== devSecret) return res.status(401).json({ error: 'Unauthorized' });
+  // Dev install bypass — disabled in production
+  if (process.env.NODE_ENV !== 'production') {
+    app.get('/shopify/dev-install', async (req, res) => {
+      const shop = req.query.shop as string | undefined;
+      const token = req.query.token as string | undefined;
+      const devSecret = config?.shopifyApiSecret ?? 'dev-secret';
+      if (!shop) return res.status(400).json({ error: 'shop param required' });
+      if (token !== devSecret) return res.status(401).json({ error: 'Unauthorized' });
 
-    const install = await authService.beginInstall(shop);
-    return res.redirect(install.redirectUrl);
-  });
+      const install = await authService.beginInstall(shop);
+      return res.redirect(install.redirectUrl);
+    });
+  }
 
   app.get('/shopify/auth/callback', async (req, res) => {
     try {
@@ -329,6 +334,39 @@ export function createApp(config?: {
     });
 
     return res.status(200).json({ acknowledged: true });
+  });
+
+  // App uninstalled webhook — cleans up shop data
+  app.post('/shopify/webhooks/app/uninstalled', async (req, res) => {
+    const shopDomain = req.headers['x-shopify-shop-domain'] as string | undefined;
+    const webhookHmac = req.header('x-shopify-hmac-sha256');
+    const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body));
+
+    if (!verifyShopifyWebhookHmac(rawBody, webhookHmac, config?.shopifyApiSecret ?? 'dev-secret')) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
+
+    if (!shopDomain) return res.status(400).json({ error: 'Missing shop domain' });
+
+    try {
+      await deps.shops.deleteByShopDomain(shopDomain);
+      // Note: merchant_configs left in place — no delete method; shop tokens are removed above
+      await deps.auditLogs.create({
+        id: randomUUID(),
+        actor: 'shopify',
+        action: 'app_uninstalled',
+        entityType: 'shop',
+        entityId: shopDomain,
+        occurredAt: new Date(),
+        correlationId: req.header('x-shopify-webhook-id') ?? randomUUID(),
+        metadata: { uninstalled_at: new Date().toISOString() }
+      });
+      deps.logger.info('App uninstalled — shop data removed', { shopDomain });
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      deps.logger.error('Uninstall webhook error', { error: String(err), shopDomain });
+      return res.status(500).json({ error: 'Failed to process uninstall' });
+    }
   });
 
   app.post('/merchant/config', async (req, res) => {

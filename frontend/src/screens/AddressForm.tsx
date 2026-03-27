@@ -19,6 +19,14 @@ interface FormErrors {
   email?: string;
 }
 
+const PinIcon = ({ color = 'white' }: { color?: string }) => (
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round"
+      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+    <circle cx="12" cy="11" r="3" />
+  </svg>
+);
+
 export const AddressForm: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -70,27 +78,19 @@ export const AddressForm: React.FC = () => {
     setDropoffAddress({ [field]: e.target.value });
 
   return (
-    <AppShell title="Delivery Details" showBack showNav={false}>
+    <AppShell showBack showNav={false} step={1} totalSteps={4}>
       <div className="px-5 py-6 flex flex-col gap-5">
-
-        {/* Service Type indicator */}
-        <div className="flex items-center gap-2 text-sm">
-          <span className="bg-[#FED7AA] text-[#C2410C] font-medium px-3 py-1 rounded-full">
-            {draft.serviceType === 'logo_pickup' ? '👜 Logo Pickup' : '📦 Item Delivery'}
-          </span>
-        </div>
 
         {/* Pickup Address */}
         <Card>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-full bg-[#F97316] flex items-center justify-center">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <circle cx="12" cy="11" r="3" />
-              </svg>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-9 h-9 rounded-full bg-[#E8621A] flex items-center justify-center flex-shrink-0">
+              <PinIcon />
             </div>
-            <h2 className="font-semibold text-[#1C1917]">Pickup Location</h2>
+            <div>
+              <h2 className="font-bold text-[#1C1917] text-[15px]">Pickup Location</h2>
+              <p className="text-[12px] text-[#A8A29E]">Where we pick up your order</p>
+            </div>
           </div>
           <div className="flex flex-col gap-3">
             <Input
@@ -138,26 +138,27 @@ export const AddressForm: React.FC = () => {
           </div>
         </Card>
 
-        {/* Arrow divider */}
-        <div className="flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full bg-[#F97316] flex items-center justify-center shadow-md">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
+        {/* Route divider */}
+        <div className="flex items-center gap-3 px-2">
+          <div className="flex-1 border-l-2 border-dashed border-[#EEEBE8] ml-4 h-6" />
+          <div className="w-8 h-8 rounded-full bg-[#1C1917] flex items-center justify-center shadow-md flex-shrink-0">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
+          <div className="flex-1 border-l-2 border-dashed border-[#EEEBE8] ml-4 h-6" />
         </div>
 
         {/* Drop-off Address */}
         <Card>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-full bg-[#1C1917] flex items-center justify-center">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <circle cx="12" cy="11" r="3" />
-              </svg>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-9 h-9 rounded-full bg-[#1C1917] flex items-center justify-center flex-shrink-0">
+              <PinIcon />
             </div>
-            <h2 className="font-semibold text-[#1C1917]">Drop-off Location</h2>
+            <div>
+              <h2 className="font-bold text-[#1C1917] text-[15px]">Drop-off Location</h2>
+              <p className="text-[12px] text-[#A8A29E]">Where we deliver your order</p>
+            </div>
           </div>
           <div className="flex flex-col gap-3">
             <Input
@@ -207,7 +208,7 @@ export const AddressForm: React.FC = () => {
 
         {/* Contact Info */}
         <Card>
-          <h2 className="font-semibold text-[#1C1917] mb-4">Contact Information</h2>
+          <h2 className="font-bold text-[#1C1917] text-[15px] mb-5">Contact Information</h2>
           <div className="flex flex-col gap-3">
             <Input
               label="Full Name"
@@ -240,17 +241,21 @@ export const AddressForm: React.FC = () => {
 
         {/* Notes */}
         <Card>
-          <h2 className="font-semibold text-[#1C1917] mb-4">Delivery Notes</h2>
+          <h2 className="font-bold text-[#1C1917] text-[15px] mb-4">Delivery Notes</h2>
           <Textarea
-            placeholder="Any special instructions? Gate code, fragile items, etc."
+            placeholder="Gate code, fragile items, special instructions…"
             value={draft.notes ?? ''}
             onChange={(e) => setNotes(e.target.value)}
           />
         </Card>
 
         <Button size="lg" fullWidth onClick={handleNext}>
-          Continue to Summary →
+          Continue →
         </Button>
+
+        <p className="text-center text-[11px] text-[#C4BFB9] -mt-2">
+          Step 1 of 4 · Delivery details
+        </p>
       </div>
     </AppShell>
   );

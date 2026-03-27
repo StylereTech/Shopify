@@ -1,264 +1,664 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const SHOPIFY_API = import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app';
-const SHOP_DOMAIN = new URLSearchParams(window.location.search).get('shop') || 
-  import.meta.env.VITE_SHOP_DOMAIN || 'cxrxht-v1.myshopify.com';
+const API = import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app';
 
-interface OnboardingStatus {
-  appInstalled: boolean;
-  tokenPresent: boolean;
-  oauthValid: boolean;
-  carrierServiceRegistered: boolean;
-  pickupLocationConfigured: boolean;
-  merchantConfigComplete: boolean;
-  dispatchConnectivityOk: boolean;
-  locations: Array<{ id: string; name: string; active: boolean; address1: string | null; city: string | null }>;
-  reasons: string[];
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface MerchantInfo {
+  id: string;
+  email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  store_name: string;
+  plan: string;
+  plan_status: string;
 }
 
-interface MerchantConfig {
-  pickupLat: string;
-  pickupLng: string;
-  radiusKm: string;
-  baseFeeCents: string;
-  timezone: string;
+interface DashboardStats {
+  active: number;
+  pending: number;
+  completed_today: number;
+  failed: number;
+  total: number;
 }
+
+interface Order {
+  id: string;
+  customer_name: string;
+  customer_phone?: string;
+  delivery_address?: string;
+  status: string;
+  total_amount_cents: number;
+  created_at: string;
+}
+
+interface Invoice {
+  id: string;
+  stripe_invoice_id?: string;
+  amount_cents: number;
+  status: string;
+  period_start?: string;
+  period_end?: string;
+  created_at: string;
+}
+
+interface StaffMember {
+  id: string;
+  email: string;
+  role: string;
+  first_name?: string;
+  last_name?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, string> = {
+  pending: '#f59e0b',
+  assigned: '#3b82f6',
+  picked_up: '#8b5cf6',
+  en_route: '#06b6d4',
+  delivered: '#22c55e',
+  failed: '#ef4444',
+  cancelled: '#6b7280',
+  active: '#22c55e',
+  past_due: '#ef4444',
+};
+
+const TABS = ['overview', 'orders', 'tracking', 'settings', 'billing', 'team'] as const;
+type Tab = typeof TABS[number];
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export const MerchantDashboard: React.FC = () => {
-  const [status, setStatus] = useState<OnboardingStatus | null>(null);
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>('overview');
+  const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [config, setConfig] = useState<MerchantConfig>({
-    pickupLat: '32.7341',
-    pickupLng: '-96.8172',
-    radiusKm: '16',
-    baseFeeCents: '999',
-    timezone: 'America/Chicago',
-  });
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [createOrderForm, setCreateOrderForm] = useState({ customer_name: '', customer_phone: '', delivery_address: '', total_amount_cents: '' });
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderTotal, setOrderTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch(`${SHOPIFY_API}/shopify/onboarding/status?shop=${SHOP_DOMAIN}`)
-      .then(r => r.json())
-      .then(d => { setStatus(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+  const token = localStorage.getItem('merchant_token');
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await fetch(`${SHOPIFY_API}/merchant/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          merchantId: SHOP_DOMAIN.replace('.myshopify.com', ''),
-          shopDomain: SHOP_DOMAIN,
-          storreeMerchantId: SHOP_DOMAIN.replace('.myshopify.com', ''),
-          pickupLocation: { lat: parseFloat(config.pickupLat), lng: parseFloat(config.pickupLng) },
-          radiusKm: parseFloat(config.radiusKm),
-          oneHourEnabled: true,
-          sameDayEnabled: true,
-          oneHourCutoffHourLocal: 19,
-          sameDayCutoffHourLocal: 15,
-          baseFeeCents: parseInt(config.baseFeeCents),
-          pricePerKmCents: 75,
-          platformMarkupPercent: 15,
-          timezone: config.timezone,
-          isActive: true,
-        }),
+  const apiFetch = useCallback(
+    async (path: string, options?: RequestInit) => {
+      const res = await fetch(`${API}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...(options?.headers || {}),
+        },
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-      // Refresh status
-      const res = await fetch(`${SHOPIFY_API}/shopify/onboarding/status?shop=${SHOP_DOMAIN}`);
-      setStatus(await res.json());
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const StatusDot = ({ ok }: { ok: boolean }) => (
-    <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${ok ? 'bg-green-500' : 'bg-red-400'}`} />
+      if (res.status === 401) {
+        localStorage.removeItem('merchant_token');
+        localStorage.removeItem('merchant_info');
+        navigate('/merchant/login');
+        throw new Error('unauthorized');
+      }
+      return res;
+    },
+    [token, navigate]
   );
 
-  return (
-    <div className="min-h-screen bg-[#FAFAF9]">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-[#F97316] to-[#EA6B0E] text-white px-6 pt-10 pb-8">
-        <div className="text-2xl font-bold tracking-tight mb-1">Style.re</div>
-        <div className="text-white/80 text-sm">Local Delivery · Merchant Dashboard</div>
-        <div className="mt-3 text-xs text-white/60 font-mono">{SHOP_DOMAIN}</div>
+  // Load dashboard on mount
+  useEffect(() => {
+    if (!token) { navigate('/merchant/login'); return; }
+
+    const load = async () => {
+      try {
+        const [dashRes, meRes] = await Promise.all([
+          apiFetch('/api/merchant/dashboard'),
+          apiFetch('/api/merchant/auth/me'),
+        ]);
+
+        if (dashRes.ok) {
+          const d = await dashRes.json();
+          setStats(d.stats);
+          setRecentOrders(d.recent_orders || []);
+          setMerchant(d.merchant);
+        }
+        if (meRes.ok) {
+          const m = await meRes.json();
+          setMerchant(m);
+          setSettings({
+            store_name: m.store_name || '',
+            store_address: m.store_address || '',
+            store_phone: m.store_phone || '',
+            city: m.city || '',
+            state: m.state || '',
+            zip: m.zip || '',
+            first_name: m.first_name || '',
+            last_name: m.last_name || '',
+          });
+        }
+      } catch {
+        // handled above
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [token, navigate, apiFetch]);
+
+  // Load tab-specific data
+  useEffect(() => {
+    if (!token || loading) return;
+
+    if (tab === 'orders') {
+      apiFetch(`/api/merchant/orders?page=${orderPage}&limit=20${statusFilter ? `&status=${statusFilter}` : ''}`)
+        .then((r) => r.json())
+        .then((d) => { setOrders(d.orders || []); setOrderTotal(d.pagination?.total || 0); })
+        .catch(() => {});
+    }
+
+    if (tab === 'billing') {
+      apiFetch('/api/merchant/billing')
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (d) setInvoices(d.invoices || []); })
+        .catch(() => {});
+    }
+
+    if (tab === 'team' && merchant?.plan === 'growth') {
+      apiFetch('/api/merchant/team')
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => { if (d) setStaff(d.staff || []); })
+        .catch(() => {});
+    }
+  }, [tab, orderPage, statusFilter, loading, token, merchant?.plan, apiFetch]);
+
+  const handleLogout = async () => {
+    await apiFetch('/api/merchant/auth/logout', { method: 'POST' }).catch(() => {});
+    localStorage.removeItem('merchant_token');
+    localStorage.removeItem('merchant_info');
+    navigate('/merchant/login');
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      const res = await apiFetch('/api/merchant/settings', { method: 'PUT', body: JSON.stringify(settings) });
+      if (res.ok) setActionMsg('Settings saved!');
+      else setActionMsg('Failed to save settings');
+    } catch { setActionMsg('Error saving settings'); }
+    setSavingSettings(false);
+    setTimeout(() => setActionMsg(null), 3000);
+  };
+
+  const handleInviteStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+    try {
+      const res = await apiFetch('/api/merchant/team', { method: 'POST', body: JSON.stringify({ email: inviteEmail }) });
+      if (res.ok) {
+        const d = await res.json();
+        setStaff((s) => [...s, d.staff_member]);
+        setInviteEmail('');
+        setActionMsg('Staff member invited!');
+      }
+    } catch { setActionMsg('Error inviting staff'); }
+    setTimeout(() => setActionMsg(null), 3000);
+  };
+
+  const handleCreateOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await apiFetch('/api/merchant/orders', {
+        method: 'POST',
+        body: JSON.stringify({ ...createOrderForm, total_amount_cents: parseInt(createOrderForm.total_amount_cents || '0') }),
+      });
+      if (res.ok) {
+        setActionMsg('Order created!');
+        setCreateOrderForm({ customer_name: '', customer_phone: '', delivery_address: '', total_amount_cents: '' });
+        setTab('orders');
+      }
+    } catch { setActionMsg('Error creating order'); }
+    setTimeout(() => setActionMsg(null), 3000);
+  };
+
+  const handleBillingPortal = async () => {
+    try {
+      const res = await apiFetch('/api/merchant/billing/portal', { method: 'POST' });
+      if (res.ok) {
+        const d = await res.json();
+        window.location.href = d.portal_url;
+      }
+    } catch { setActionMsg('Error opening billing portal'); }
+  };
+
+  // ── Styles ─────────────────────────────────────────────────────────────────
+  const cardStyle: React.CSSProperties = {
+    background: '#111113',
+    border: '1px solid #27272a',
+    borderRadius: 12,
+    padding: 20,
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: '#18181b',
+    border: '1px solid #27272a',
+    borderRadius: 8,
+    padding: '10px 12px',
+    color: '#fff',
+    fontSize: 14,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#09090b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#71717a', fontFamily: 'system-ui, sans-serif' }}>
+        Loading dashboard...
       </div>
+    );
+  }
 
-      <div className="px-5 py-6 space-y-5">
-
-        {/* Status Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-[#F5F5F4] p-5">
-          <h2 className="font-bold text-[#1C1917] text-base mb-4">System Status</h2>
-          {loading ? (
-            <div className="text-sm text-[#78716C]">Loading...</div>
-          ) : status ? (
-            <div className="space-y-2 text-sm">
-              <div><StatusDot ok={status.appInstalled} /><span>App Installed</span></div>
-              <div><StatusDot ok={status.oauthValid} /><span>OAuth Valid</span></div>
-              <div><StatusDot ok={status.dispatchConnectivityOk} /><span>Dispatch Connected</span></div>
-              <div><StatusDot ok={status.pickupLocationConfigured} /><span>Pickup Location Set</span></div>
-              <div><StatusDot ok={status.carrierServiceRegistered} /><span>Carrier Service Active</span></div>
-              {status.reasons.length > 0 && (
-                <div className="mt-3 p-3 bg-amber-50 rounded-xl text-xs text-amber-700 space-y-1">
-                  {status.reasons.map((r, i) => <div key={i}>⚠️ {r}</div>)}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-sm text-red-500">Could not load status</div>
+  return (
+    <div style={{ minHeight: '100vh', background: '#09090b', color: '#fff', fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column' }}>
+      {/* Top Nav */}
+      <header style={{ padding: '0 24px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 30, height: 30, background: '#f59e0b', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 15 }}>S</div>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>{merchant?.store_name || 'Stowry'}</span>
+          {merchant?.plan_status && (
+            <span style={{ background: STATUS_COLORS[merchant.plan_status] + '22', color: STATUS_COLORS[merchant.plan_status], border: `1px solid ${STATUS_COLORS[merchant.plan_status]}`, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
+              {merchant.plan === 'growth' ? 'Growth' : 'Access'} · {merchant.plan_status}
+            </span>
           )}
         </div>
+        <button
+          onClick={handleLogout}
+          style={{ background: 'transparent', border: '1px solid #3f3f46', color: '#a1a1aa', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}
+        >
+          Sign Out
+        </button>
+      </header>
 
-        {/* Store Locations */}
-        {status?.locations && status.locations.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-[#F5F5F4] p-5">
-            <h2 className="font-bold text-[#1C1917] text-base mb-3">Store Locations</h2>
-            {status.locations.map(loc => (
-              <div key={loc.id} className="flex items-center gap-3 text-sm">
-                <span className={`w-2 h-2 rounded-full ${loc.active ? 'bg-green-500' : 'bg-gray-300'}`} />
-                <div>
-                  <div className="font-medium text-[#1C1917]">{loc.name}</div>
-                  {loc.address1 && <div className="text-[#78716C] text-xs">{loc.address1}, {loc.city}</div>}
+      <div style={{ display: 'flex', flex: 1 }}>
+        {/* Sidebar */}
+        <aside style={{ width: 200, borderRight: '1px solid #27272a', padding: '16px 12px', flexShrink: 0 }}>
+          {TABS.map((t) => {
+            const labels: Record<Tab, string> = {
+              overview: '📊 Overview',
+              orders: '📦 Orders',
+              tracking: '🚚 Tracking',
+              settings: '⚙️ Settings',
+              billing: '💳 Billing',
+              team: '👥 Team',
+            };
+            const isTeam = t === 'team' && merchant?.plan !== 'growth';
+            return (
+              <button
+                key={t}
+                onClick={() => !isTeam && setTab(t)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  marginBottom: 4,
+                  background: tab === t ? '#1e1e20' : 'transparent',
+                  border: tab === t ? '1px solid #3f3f46' : '1px solid transparent',
+                  color: isTeam ? '#3f3f46' : tab === t ? '#f59e0b' : '#a1a1aa',
+                  cursor: isTeam ? 'default' : 'pointer',
+                  fontSize: 14,
+                  fontWeight: tab === t ? 600 : 400,
+                }}
+              >
+                {labels[t]}
+                {isTeam && <span style={{ display: 'block', fontSize: 10, marginTop: 2 }}>Growth only</span>}
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* Main Content */}
+        <main style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
+          {actionMsg && (
+            <div style={{ background: '#052e16', border: '1px solid #14532d', borderRadius: 8, padding: '10px 16px', marginBottom: 16, color: '#86efac', fontSize: 14 }}>
+              {actionMsg}
+            </div>
+          )}
+
+          {/* OVERVIEW */}
+          {tab === 'overview' && (
+            <div>
+              <h2 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700 }}>Overview</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
+                {[
+                  { label: 'Active', value: stats?.active ?? 0, color: '#22c55e' },
+                  { label: 'Pending Pickup', value: stats?.pending ?? 0, color: '#f59e0b' },
+                  { label: 'Completed Today', value: stats?.completed_today ?? 0, color: '#3b82f6' },
+                  { label: 'Failed / Cancelled', value: stats?.failed ?? 0, color: '#ef4444' },
+                ].map((s) => (
+                  <div key={s.label} style={{ ...cardStyle, textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 8px', color: '#71717a', fontSize: 13 }}>{s.label}</p>
+                    <p style={{ margin: 0, fontSize: 36, fontWeight: 800, color: s.color }}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <h3 style={{ margin: '0 0 12px', fontSize: 16, color: '#a1a1aa' }}>Recent Orders</h3>
+              <div style={cardStyle}>
+                {recentOrders.length === 0 ? (
+                  <p style={{ color: '#52525b', textAlign: 'center', padding: 20 }}>No recent orders</p>
+                ) : (
+                  recentOrders.map((o) => (
+                    <div
+                      key={o.id}
+                      onClick={() => navigate(`/merchant/orders/${o.id}`)}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #27272a', cursor: 'pointer' }}
+                    >
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{o.customer_name}</p>
+                        <p style={{ margin: '2px 0 0', color: '#71717a', fontSize: 12 }}>{new Date(o.created_at).toLocaleString()}</p>
+                      </div>
+                      <span style={{ background: (STATUS_COLORS[o.status] || '#6b7280') + '22', color: STATUS_COLORS[o.status] || '#6b7280', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
+                        {o.status}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ORDERS */}
+          {tab === 'orders' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Orders</h2>
+                <button
+                  onClick={() => setTab('overview')}
+                  style={{ background: '#f59e0b', color: '#09090b', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 14 }}
+                >
+                  + New Order
+                </button>
+              </div>
+
+              {/* Filter */}
+              <div style={{ marginBottom: 16 }}>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setOrderPage(1); }}
+                  style={{ ...inputStyle, width: 200 }}
+                >
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="assigned">Assigned</option>
+                  <option value="picked_up">Picked Up</option>
+                  <option value="en_route">En Route</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <div style={cardStyle}>
+                {orders.length === 0 ? (
+                  <p style={{ color: '#52525b', textAlign: 'center', padding: 20 }}>No orders found</p>
+                ) : (
+                  orders.map((o) => (
+                    <div
+                      key={o.id}
+                      onClick={() => navigate(`/merchant/orders/${o.id}`)}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #27272a', cursor: 'pointer' }}
+                    >
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{o.customer_name}</p>
+                        <p style={{ margin: '2px 0 0', color: '#71717a', fontSize: 12 }}>{o.delivery_address} · {new Date(o.created_at).toLocaleString()}</p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ background: (STATUS_COLORS[o.status] || '#6b7280') + '22', color: STATUS_COLORS[o.status] || '#6b7280', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                          {o.status}
+                        </span>
+                        <span style={{ color: '#a1a1aa', fontSize: 12 }}>${(o.total_amount_cents / 100).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Pagination */}
+              {orderTotal > 20 && (
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+                  <button disabled={orderPage === 1} onClick={() => setOrderPage((p) => p - 1)} style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', padding: '6px 14px', borderRadius: 8, cursor: 'pointer' }}>Prev</button>
+                  <span style={{ padding: '6px 14px', color: '#71717a', fontSize: 14 }}>Page {orderPage}</span>
+                  <button disabled={orderPage * 20 >= orderTotal} onClick={() => setOrderPage((p) => p + 1)} style={{ background: '#18181b', border: '1px solid #27272a', color: '#a1a1aa', padding: '6px 14px', borderRadius: 8, cursor: 'pointer' }}>Next</button>
+                </div>
+              )}
+
+              {/* Create Order Form */}
+              <div style={{ ...cardStyle, marginTop: 24 }}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Create Manual Order</h3>
+                <form onSubmit={handleCreateOrder}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Customer Name *</label>
+                      <input value={createOrderForm.customer_name} onChange={(e) => setCreateOrderForm((f) => ({ ...f, customer_name: e.target.value }))} required style={inputStyle} placeholder="Jane Smith" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Phone</label>
+                      <input value={createOrderForm.customer_phone} onChange={(e) => setCreateOrderForm((f) => ({ ...f, customer_phone: e.target.value }))} style={inputStyle} placeholder="+1 555-0100" />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Delivery Address *</label>
+                    <input value={createOrderForm.delivery_address} onChange={(e) => setCreateOrderForm((f) => ({ ...f, delivery_address: e.target.value }))} required style={inputStyle} placeholder="123 Oak St, Dallas TX 75203" />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Total (cents)</label>
+                    <input type="number" value={createOrderForm.total_amount_cents} onChange={(e) => setCreateOrderForm((f) => ({ ...f, total_amount_cents: e.target.value }))} style={inputStyle} placeholder="2999" />
+                  </div>
+                  <button type="submit" style={{ background: '#f59e0b', color: '#09090b', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                    Create Order
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* TRACKING */}
+          {tab === 'tracking' && (
+            <div>
+              <h2 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700 }}>Live Tracking</h2>
+              <div style={cardStyle}>
+                {recentOrders.filter((o) => ['assigned', 'picked_up', 'en_route'].includes(o.status)).length === 0 ? (
+                  <p style={{ color: '#52525b', textAlign: 'center', padding: 20 }}>No active deliveries right now</p>
+                ) : (
+                  recentOrders
+                    .filter((o) => ['assigned', 'picked_up', 'en_route'].includes(o.status))
+                    .map((o) => (
+                      <div
+                        key={o.id}
+                        onClick={() => navigate(`/merchant/orders/${o.id}`)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #27272a', cursor: 'pointer' }}
+                      >
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, fontSize: 14 }}>{o.customer_name}</p>
+                          <p style={{ margin: '2px 0 0', color: '#71717a', fontSize: 12 }}>{o.delivery_address}</p>
+                        </div>
+                        <span style={{ background: (STATUS_COLORS[o.status] || '#6b7280') + '22', color: STATUS_COLORS[o.status] || '#6b7280', padding: '4px 12px', borderRadius: 999, fontSize: 13, fontWeight: 600 }}>
+                          {o.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* SETTINGS */}
+          {tab === 'settings' && (
+            <div>
+              <h2 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700 }}>Store Settings</h2>
+              <div style={{ ...cardStyle, maxWidth: 560 }}>
+                <form onSubmit={handleSaveSettings}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>First Name</label>
+                      <input value={settings.first_name || ''} onChange={(e) => setSettings((s) => ({ ...s, first_name: e.target.value }))} style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Last Name</label>
+                      <input value={settings.last_name || ''} onChange={(e) => setSettings((s) => ({ ...s, last_name: e.target.value }))} style={inputStyle} />
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Store Name</label>
+                    <input value={settings.store_name || ''} onChange={(e) => setSettings((s) => ({ ...s, store_name: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Store Address</label>
+                    <input value={settings.store_address || ''} onChange={(e) => setSettings((s) => ({ ...s, store_address: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ marginBottom: 14 }}>
+                    <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>Store Phone</label>
+                    <input value={settings.store_phone || ''} onChange={(e) => setSettings((s) => ({ ...s, store_phone: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>City</label>
+                      <input value={settings.city || ''} onChange={(e) => setSettings((s) => ({ ...s, city: e.target.value }))} style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>State</label>
+                      <input value={settings.state || ''} onChange={(e) => setSettings((s) => ({ ...s, state: e.target.value }))} style={inputStyle} maxLength={2} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#a1a1aa', fontSize: 12, marginBottom: 4 }}>ZIP</label>
+                      <input value={settings.zip || ''} onChange={(e) => setSettings((s) => ({ ...s, zip: e.target.value }))} style={inputStyle} />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={savingSettings} style={{ background: '#f59e0b', color: '#09090b', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                    {savingSettings ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* BILLING */}
+          {tab === 'billing' && (
+            <div>
+              <h2 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700 }}>Billing</h2>
+
+              <div style={{ ...cardStyle, marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: '0 0 4px', color: '#a1a1aa', fontSize: 13 }}>Current Plan</p>
+                    <p style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                      Stowry {merchant?.plan === 'growth' ? 'Growth' : 'Access'}
+                      {' '}
+                      <span style={{ background: (STATUS_COLORS[merchant?.plan_status || ''] || '#6b7280') + '22', color: STATUS_COLORS[merchant?.plan_status || ''] || '#6b7280', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
+                        {merchant?.plan_status}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleBillingPortal}
+                    style={{ background: '#18181b', border: '1px solid #3f3f46', color: '#a1a1aa', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
+                  >
+                    Manage Billing
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
 
-        {/* Config Form */}
-        <div className="bg-white rounded-2xl shadow-sm border border-[#F5F5F4] p-5">
-          <h2 className="font-bold text-[#1C1917] text-base mb-4">Delivery Configuration</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-[#78716C] mb-1 block">Pickup Latitude</label>
-                <input
-                  className="w-full border border-[#E7E5E4] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]"
-                  value={config.pickupLat}
-                  onChange={e => setConfig(c => ({ ...c, pickupLat: e.target.value }))}
-                  placeholder="32.7341"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-[#78716C] mb-1 block">Pickup Longitude</label>
-                <input
-                  className="w-full border border-[#E7E5E4] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]"
-                  value={config.pickupLng}
-                  onChange={e => setConfig(c => ({ ...c, pickupLng: e.target.value }))}
-                  placeholder="-96.8172"
-                />
+              <div style={cardStyle}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 15, color: '#a1a1aa' }}>Invoice History</h3>
+                {invoices.length === 0 ? (
+                  <p style={{ color: '#52525b', textAlign: 'center', padding: 16 }}>No invoices yet</p>
+                ) : (
+                  invoices.map((inv) => (
+                    <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #27272a' }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: 14 }}>${(inv.amount_cents / 100).toFixed(2)}</p>
+                        <p style={{ margin: '2px 0 0', color: '#71717a', fontSize: 12 }}>{new Date(inv.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <span style={{ background: (STATUS_COLORS[inv.status] || '#6b7280') + '22', color: STATUS_COLORS[inv.status] || '#6b7280', padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
+                        {inv.status}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-[#78716C] mb-1 block">Delivery Radius (km)</label>
-              <input
-                className="w-full border border-[#E7E5E4] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]"
-                value={config.radiusKm}
-                onChange={e => setConfig(c => ({ ...c, radiusKm: e.target.value }))}
-                placeholder="16"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#78716C] mb-1 block">Base Delivery Fee (cents)</label>
-              <input
-                className="w-full border border-[#E7E5E4] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]"
-                value={config.baseFeeCents}
-                onChange={e => setConfig(c => ({ ...c, baseFeeCents: e.target.value }))}
-                placeholder="999"
-              />
-              <div className="text-xs text-[#78716C] mt-1">${(parseInt(config.baseFeeCents || '0') / 100).toFixed(2)} base fee</div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-[#78716C] mb-1 block">Timezone</label>
-              <select
-                className="w-full border border-[#E7E5E4] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]"
-                value={config.timezone}
-                onChange={e => setConfig(c => ({ ...c, timezone: e.target.value }))}
-              >
-                <option value="America/Chicago">Central (Chicago)</option>
-                <option value="America/New_York">Eastern (New York)</option>
-                <option value="America/Los_Angeles">Pacific (Los Angeles)</option>
-                <option value="America/Denver">Mountain (Denver)</option>
-              </select>
-            </div>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="w-full bg-[#F97316] text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-60 transition-opacity"
-            >
-              {saving ? 'Saving...' : saved ? '✅ Saved!' : 'Save Configuration'}
-            </button>
-          </div>
-        </div>
+          )}
 
-        {/* Checkout Integration Info */}
-        <div className="bg-white rounded-2xl shadow-sm border border-[#F5F5F4] p-5">
-          <h2 className="font-bold text-[#1C1917] text-base mb-3">Checkout Integration</h2>
-          <div className="space-y-3 text-sm text-[#57534E]">
-            <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-700">
-              <strong>⚠️ Carrier Service Requirement:</strong> Injecting Storree into Shopify checkout requires Shopify Advanced or Plus plan. Development stores are also eligible.
-            </div>
-            <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700">
-              <strong>✅ Any Plan — Direct Link Flow:</strong> Share the Storree ordering link with customers. They order directly, pay via Stripe, and a DoorDash courier is dispatched automatically.
-            </div>
-            <div className="flex items-center justify-between text-xs font-medium text-[#57534E] mt-2">
-              <span>Customer Ordering Link:</span>
-            </div>
-            <div className="bg-[#F5F5F4] rounded-lg p-2 font-mono text-xs break-all text-[#1C1917]">
-              https://stylere.app/shopify?shop={SHOP_DOMAIN}
-            </div>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`https://stylere.app/shopify?shop=${SHOP_DOMAIN}`);
-              }}
-              className="w-full py-2 text-xs font-medium bg-[#F97316] text-white rounded-xl"
-            >
-              Copy Link
-            </button>
-          </div>
-        </div>
+          {/* TEAM */}
+          {tab === 'team' && (
+            <div>
+              <h2 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 700 }}>Team</h2>
+              {merchant?.plan !== 'growth' ? (
+                <div style={{ ...cardStyle, textAlign: 'center', padding: 40 }}>
+                  <p style={{ color: '#71717a', marginBottom: 16 }}>Team management is available on the Growth plan.</p>
+                  <button
+                    onClick={() => navigate('/merchant/pricing')}
+                    style={{ background: '#f59e0b', color: '#09090b', border: 'none', padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Upgrade to Growth
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ ...cardStyle, marginBottom: 16 }}>
+                    <h3 style={{ margin: '0 0 16px', fontSize: 15, color: '#a1a1aa' }}>Staff Members</h3>
+                    {staff.length === 0 ? (
+                      <p style={{ color: '#52525b', textAlign: 'center', padding: 16 }}>No staff members yet</p>
+                    ) : (
+                      staff.map((s) => (
+                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #27272a' }}>
+                          <div>
+                            <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{s.first_name || ''} {s.last_name || ''} {(!s.first_name && !s.last_name) ? s.email : ''}</p>
+                            <p style={{ margin: '2px 0 0', color: '#71717a', fontSize: 12 }}>{s.email} · {s.role}</p>
+                          </div>
+                          <span style={{ color: s.is_active ? '#22c55e' : '#6b7280', fontSize: 12 }}>{s.is_active ? 'Active' : 'Inactive'}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-2xl shadow-sm border border-[#F5F5F4] p-5">
-          <h2 className="font-bold text-[#1C1917] text-base mb-3">Quick Links</h2>
-          <div className="space-y-2 text-sm">
-            <a
-              href={`${SHOPIFY_API}/shopify/onboarding/status?shop=${SHOP_DOMAIN}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between text-[#F97316] font-medium"
-            >
-              View Full Status <span>→</span>
-            </a>
-            <a
-              href={`${SHOPIFY_API}/shopify/checkout-capability?shop=${SHOP_DOMAIN}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between text-[#F97316] font-medium"
-            >
-              Checkout Capability Check <span>→</span>
-            </a>
-            <a
-              href="https://stylere.app"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-between text-[#F97316] font-medium"
-            >
-              Style.re Platform <span>→</span>
-            </a>
-          </div>
-        </div>
-
-        <div className="text-center text-xs text-[#A8A29E] pb-6">
-          Powered by Style.re Local Delivery · v1.0
-        </div>
+                  <div style={cardStyle}>
+                    <h3 style={{ margin: '0 0 16px', fontSize: 15, color: '#a1a1aa' }}>Invite Staff</h3>
+                    <form onSubmit={handleInviteStaff} style={{ display: 'flex', gap: 10 }}>
+                      <input
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        required
+                        style={{ ...inputStyle, flex: 1 }}
+                        placeholder="staff@store.com"
+                      />
+                      <button type="submit" style={{ background: '#f59e0b', color: '#09090b', border: 'none', padding: '10px 16px', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: 14, whiteSpace: 'nowrap' }}>
+                        Invite
+                      </button>
+                    </form>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );
 };
+
+export default MerchantDashboard;

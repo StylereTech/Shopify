@@ -70,6 +70,7 @@ export class FileShopInstallationRepository implements ShopInstallationRepositor
   constructor(private readonly store: JsonFileStore) {}
   async upsert(installation: ShopInstallation): Promise<void> { const data = await this.store.read(); data.shops = data.shops.filter((s) => s.shopDomain !== installation.shopDomain).concat(installation); await this.store.write(data); }
   async getByShopDomain(shopDomain: string): Promise<ShopInstallation | undefined> { const data = await this.store.read(); return data.shops.find((s) => s.shopDomain === shopDomain); }
+  async deleteByShopDomain(shopDomain: string): Promise<void> { const data = await this.store.read(); data.shops = data.shops.filter((s) => s.shopDomain !== shopDomain); await this.store.write(data); }
 }
 
 export class FileOAuthStateRepository implements OAuthStateRepository {
