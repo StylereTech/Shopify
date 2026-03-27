@@ -55,6 +55,7 @@ export class FileShopInstallationRepository {
     }
     async upsert(installation) { const data = await this.store.read(); data.shops = data.shops.filter((s) => s.shopDomain !== installation.shopDomain).concat(installation); await this.store.write(data); }
     async getByShopDomain(shopDomain) { const data = await this.store.read(); return data.shops.find((s) => s.shopDomain === shopDomain); }
+    async deleteByShopDomain(shopDomain) { const data = await this.store.read(); data.shops = data.shops.filter((s) => s.shopDomain !== shopDomain); await this.store.write(data); }
 }
 export class FileOAuthStateRepository {
     store;

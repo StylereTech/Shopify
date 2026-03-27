@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-
-const API = import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app';
+import { useMerchantAuth } from '../../context/MerchantAuthContext';
 
 export const MerchantLogin: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const justRegistered = searchParams.get('registered') === '1';
+  const { login } = useMerchantAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,25 +19,10 @@ export const MerchantLogin: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/api/merchant/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Login failed');
-        setLoading(false);
-        return;
-      }
-
-      localStorage.setItem('merchant_token', data.token);
-      localStorage.setItem('merchant_info', JSON.stringify(data.merchant));
+      await login(email, password);
       navigate('/merchant/dashboard');
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
       setLoading(false);
     }
   };

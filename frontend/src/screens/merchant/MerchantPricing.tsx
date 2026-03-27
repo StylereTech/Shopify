@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { merchantApi, type Plan } from '../../api/merchantApi';
 
-const PLANS = [
+// Fallback plans if API is unavailable
+const FALLBACK_PLANS: Plan[] = [
   {
     id: 'access',
     name: 'Stowry Access',
-    price: '$100',
-    period: '/month',
+    price_cents: 10000,
+    price_display: '$100',
     popular: false,
     features: [
       'Merchant dashboard',
@@ -20,8 +22,8 @@ const PLANS = [
   {
     id: 'growth',
     name: 'Stowry Growth',
-    price: '$200',
-    period: '/month',
+    price_cents: 20000,
+    price_display: '$200',
     popular: true,
     features: [
       'Everything in Access',
@@ -37,6 +39,22 @@ const PLANS = [
 
 export const MerchantPricing: React.FC = () => {
   const navigate = useNavigate();
+  const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    merchantApi
+      .plans()
+      .then((data) => {
+        if (data.plans && data.plans.length > 0) {
+          setPlans(data.plans);
+        }
+      })
+      .catch(() => {
+        // Use fallback plans on error
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div style={{ minHeight: '100vh', background: '#09090b', color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
@@ -66,65 +84,71 @@ export const MerchantPricing: React.FC = () => {
 
       {/* Plans */}
       <section style={{ display: 'flex', gap: 24, justifyContent: 'center', padding: '0 24px 80px', flexWrap: 'wrap' }}>
-        {PLANS.map((plan) => (
-          <div
-            key={plan.id}
-            style={{
-              background: plan.popular ? '#18181b' : '#111113',
-              border: plan.popular ? '2px solid #f59e0b' : '1px solid #27272a',
-              borderRadius: 16,
-              padding: 32,
-              width: 320,
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            {plan.popular && (
-              <div style={{
-                position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
-                background: '#f59e0b', color: '#09090b', fontWeight: 700, fontSize: 12,
-                padding: '4px 16px', borderRadius: 999, whiteSpace: 'nowrap'
-              }}>
-                MOST POPULAR
-              </div>
-            )}
-
-            <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 700 }}>{plan.name}</h2>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 24 }}>
-              <span style={{ fontSize: 48, fontWeight: 800, color: plan.popular ? '#f59e0b' : '#fff' }}>{plan.price}</span>
-              <span style={{ color: '#71717a', fontSize: 16 }}>{plan.period}</span>
-            </div>
-
-            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', flex: 1 }}>
-              {plan.features.map((f) => (
-                <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, color: '#d4d4d8', fontSize: 14 }}>
-                  <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 16 }}>✓</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <button
-              onClick={() => navigate(`/merchant/signup?plan=${plan.id}`)}
+        {loading ? (
+          <div style={{ color: '#71717a', padding: 40 }}>Loading plans...</div>
+        ) : (
+          plans.map((plan) => (
+            <div
+              key={plan.id}
               style={{
-                background: plan.popular ? '#f59e0b' : 'transparent',
-                color: plan.popular ? '#09090b' : '#f59e0b',
-                border: plan.popular ? 'none' : '1px solid #f59e0b',
-                padding: '14px 24px',
-                borderRadius: 10,
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: 'pointer',
-                transition: 'opacity 0.2s',
+                background: plan.popular ? '#18181b' : '#111113',
+                border: plan.popular ? '2px solid #f59e0b' : '1px solid #27272a',
+                borderRadius: 16,
+                padding: 32,
+                width: 320,
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
               }}
-              onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-              onMouseOut={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
             >
-              Get Started
-            </button>
-          </div>
-        ))}
+              {plan.popular && (
+                <div style={{
+                  position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
+                  background: '#f59e0b', color: '#09090b', fontWeight: 700, fontSize: 12,
+                  padding: '4px 16px', borderRadius: 999, whiteSpace: 'nowrap'
+                }}>
+                  MOST POPULAR
+                </div>
+              )}
+
+              <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 700 }}>{plan.name}</h2>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 24 }}>
+                <span style={{ fontSize: 48, fontWeight: 800, color: plan.popular ? '#f59e0b' : '#fff' }}>
+                  {plan.price_display || `$${(plan.price_cents / 100).toFixed(0)}`}
+                </span>
+                <span style={{ color: '#71717a', fontSize: 16 }}>/month</span>
+              </div>
+
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', flex: 1 }}>
+                {(plan.features || []).map((f) => (
+                  <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, color: '#d4d4d8', fontSize: 14 }}>
+                    <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 16 }}>✓</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => navigate(`/merchant/signup?plan=${plan.id}`)}
+                style={{
+                  background: plan.popular ? '#f59e0b' : 'transparent',
+                  color: plan.popular ? '#09090b' : '#f59e0b',
+                  border: plan.popular ? 'none' : '1px solid #f59e0b',
+                  padding: '14px 24px',
+                  borderRadius: 10,
+                  fontWeight: 700,
+                  fontSize: 15,
+                  cursor: 'pointer',
+                  transition: 'opacity 0.2s',
+                }}
+                onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+                onMouseOut={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+              >
+                Get Started
+              </button>
+            </div>
+          ))
+        )}
       </section>
 
       {/* Footer */}

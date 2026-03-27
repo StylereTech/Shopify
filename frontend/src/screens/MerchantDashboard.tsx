@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useMerchantAuth } from '../context/MerchantAuthContext';
 
-const API = import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app';
+const API = import.meta.env.VITE_API_URL ?? (import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app');
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,7 @@ type Tab = typeof TABS[number];
 
 export const MerchantDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { logout: authLogout } = useMerchantAuth();
   const [tab, setTab] = useState<Tab>('overview');
   const [merchant, setMerchant] = useState<MerchantInfo | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -182,9 +184,7 @@ export const MerchantDashboard: React.FC = () => {
   }, [tab, orderPage, statusFilter, loading, token, merchant?.plan, apiFetch]);
 
   const handleLogout = async () => {
-    await apiFetch('/api/merchant/auth/logout', { method: 'POST' }).catch(() => {});
-    localStorage.removeItem('merchant_token');
-    localStorage.removeItem('merchant_info');
+    await authLogout();
     navigate('/merchant/login');
   };
 

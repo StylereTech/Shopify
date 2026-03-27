@@ -18,6 +18,8 @@ import { MerchantPricing } from './screens/merchant/MerchantPricing';
 import { MerchantSignup } from './screens/merchant/MerchantSignup';
 import { MerchantLogin } from './screens/merchant/MerchantLogin';
 import { MerchantOrderDetail } from './screens/merchant/MerchantOrderDetail';
+import { MerchantAuthProvider } from './context/MerchantAuthContext';
+import { MerchantProtectedRoute } from './components/MerchantProtectedRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,18 +30,10 @@ const queryClient = new QueryClient({
   },
 });
 
-// Protected route — checks for JWT in localStorage
-const ProtectedMerchantRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const token = localStorage.getItem('merchant_token');
-  if (!token) {
-    return <Navigate to="/merchant/login" replace />;
-  }
-  return <>{children}</>;
-};
-
 const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
+      <MerchantAuthProvider>
       <BrowserRouter basename="/shopify">
         <Routes>
           {/* Customer delivery flow */}
@@ -65,17 +59,17 @@ const App: React.FC = () => {
           <Route
             path="/merchant/dashboard"
             element={
-              <ProtectedMerchantRoute>
+              <MerchantProtectedRoute>
                 <MerchantDashboard />
-              </ProtectedMerchantRoute>
+              </MerchantProtectedRoute>
             }
           />
           <Route
             path="/merchant/orders/:id"
             element={
-              <ProtectedMerchantRoute>
+              <MerchantProtectedRoute>
                 <MerchantOrderDetail />
-              </ProtectedMerchantRoute>
+              </MerchantProtectedRoute>
             }
           />
 
@@ -87,6 +81,7 @@ const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </MerchantAuthProvider>
     </QueryClientProvider>
   );
 };

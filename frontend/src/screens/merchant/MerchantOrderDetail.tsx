@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-
-const API = import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app';
+import { merchantApi } from '../../api/merchantApi';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: '#f59e0b',
@@ -52,24 +51,20 @@ export const MerchantOrderDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('merchant_token');
-    if (!token) { navigate('/merchant/login'); return; }
+    if (!id) return;
 
-    fetch(`${API}/api/merchant/orders/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => {
-        if (r.status === 401) { navigate('/merchant/login'); return null; }
-        return r.json();
-      })
+    merchantApi
+      .orderDetail(id)
       .then((data) => {
-        if (data) {
-          setOrder(data.order);
-          setTracking(data.tracking || []);
-        }
+        // API may return the order directly or wrapped in {order, tracking}
+        const orderData = (data as any).order ?? data;
+        const trackingData = (data as any).tracking ?? [];
+        setOrder(orderData as Order);
+        setTracking(trackingData);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err.message === 'unauthorized') { navigate('/merchant/login'); return; }
         setError('Failed to load order');
         setLoading(false);
       });

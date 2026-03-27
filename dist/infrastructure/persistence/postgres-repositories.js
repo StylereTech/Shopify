@@ -232,6 +232,9 @@ export class PostgresShopInstallationRepository {
             carrierServiceId: row.carrier_service_id ?? undefined
         };
     }
+    async deleteByShopDomain(shopDomain) {
+        await this.pool.query('DELETE FROM shops WHERE shop_domain=$1', [shopDomain]);
+    }
 }
 export class PostgresOAuthStateRepository {
     pool;

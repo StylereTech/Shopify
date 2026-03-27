@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-
-const API = import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app';
+import { merchantApi, type RegisterBody } from '../../api/merchantApi';
 
 export const MerchantSignup: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const defaultPlan = searchParams.get('plan') === 'growth' ? 'growth' : 'access';
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<RegisterBody>({
     first_name: '',
     last_name: '',
     email: '',
@@ -31,30 +30,17 @@ export const MerchantSignup: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch(`${API}/api/merchant/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
+      const data = await merchantApi.register(form);
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Registration failed');
-        setLoading(false);
-        return;
-      }
-
-      // If Stripe checkout URL, redirect there
+      // Redirect to Stripe checkout
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
         return;
       }
 
-      // Otherwise, go to login
       navigate('/merchant/login?registered=1');
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
       setLoading(false);
     }
   };

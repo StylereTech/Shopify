@@ -25,6 +25,7 @@ export class InMemoryShopInstallationRepository {
     shops = new Map();
     async upsert(installation) { this.shops.set(installation.shopDomain, installation); }
     async getByShopDomain(shopDomain) { return this.shops.get(shopDomain); }
+    async deleteByShopDomain(shopDomain) { this.shops.delete(shopDomain); }
 }
 export class InMemoryOAuthStateRepository {
     states = new Map();
