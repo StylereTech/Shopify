@@ -231,6 +231,17 @@ export function createApp(config?: {
     return res.redirect(install.redirectUrl);
   });
 
+  // Public install entry point — merchant enters their store name on the landing page
+  // No HMAC required (merchant-initiated, not Shopify-initiated)
+  app.get('/shopify/begin-install', async (req, res) => {
+    const shop = req.query.shop as string | undefined;
+    if (!shop || !shop.endsWith('.myshopify.com')) {
+      return res.status(400).json({ error: 'Valid shop param required (e.g. your-store.myshopify.com)' });
+    }
+    const install = await authService.beginInstall(shop);
+    return res.redirect(install.redirectUrl);
+  });
+
   // Merchant dashboard redirect — when Shopify loads the app, redirect to frontend
   app.get('/shopify/dashboard', async (req, res) => {
     const shop = req.query.shop as string | undefined;
