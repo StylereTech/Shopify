@@ -242,6 +242,17 @@ export function createApp(config?: {
     return res.redirect(install.redirectUrl);
   });
 
+  // Merchant delivery config — public read endpoint for frontend/integration checks
+  app.get('/shopify/merchant-config', async (req, res) => {
+    const shopDomain = req.query.shop as string | undefined;
+    if (!shopDomain) return res.status(400).json({ error: 'shop required' });
+    const merchantConfig = await deps.merchantConfigs.getByShopDomain(shopDomain);
+    if (!merchantConfig) {
+      return res.status(404).json({ error: 'Merchant config not found', shop: shopDomain });
+    }
+    return res.json(merchantConfig);
+  });
+
   // Merchant dashboard redirect — when Shopify loads the app, redirect to frontend
   app.get('/shopify/dashboard', async (req, res) => {
     const shop = req.query.shop as string | undefined;
@@ -295,11 +306,25 @@ export function createApp(config?: {
     }
 
     const token = tokenVault.decrypt(installation.encryptedAccessToken);
-    const locations = await locationService.listLocations(shopDomain, token);
-    const prerequisiteStatus = await carrierServiceManager.checkPrerequisites(shopDomain, token);
+
+    let locations: Awaited<ReturnType<typeof locationService.listLocations>> = [];
+    let prerequisiteStatus: Awaited<ReturnType<typeof carrierServiceManager.checkPrerequisites>> = { eligibilityUnknown: true, note: 'Not checked' };
+    let shopifyApiOk = true;
+    try {
+      locations = await locationService.listLocations(shopDomain, token);
+    } catch (err) {
+      deps.logger.warn('onboarding/status: listLocations failed (token may be expired)', { shopDomain, error: String(err) });
+      shopifyApiOk = false;
+    }
+    try {
+      prerequisiteStatus = await carrierServiceManager.checkPrerequisites(shopDomain, token);
+    } catch (err) {
+      deps.logger.warn('onboarding/status: checkPrerequisites failed', { shopDomain, error: String(err) });
+    }
     const storreeConnectivity = await storreeClient.checkConnectivity();
 
     const reasons: string[] = [];
+    if (!shopifyApiOk) reasons.push('Shopify API unreachable — access token may be expired. Re-install may be required.');
     if (!installation.carrierServiceId) reasons.push('Carrier service is not registered.');
     if (!merchantConfig) reasons.push('Merchant delivery configuration is missing.');
     if (merchantConfig && !merchantConfig.pickupLocation) reasons.push('Pickup location is not configured.');
@@ -308,7 +333,8 @@ export function createApp(config?: {
     return res.json({
       appInstalled: true,
       tokenPresent: true,
-      oauthValid: true,
+      oauthValid: shopifyApiOk,
+      shopifyApiReachable: shopifyApiOk,
       carrierServiceRegistered: !!installation.carrierServiceId,
       complianceConfigExpected: true,
       pickupLocationConfigured: !!merchantConfig?.pickupLocation,

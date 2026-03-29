@@ -36,8 +36,12 @@ const App: React.FC = () => {
       <MerchantAuthProvider>
       <BrowserRouter basename="/shopify">
         <Routes>
+          {/* Merchant landing — root */}
+          <Route path="/" element={<MerchantLanding />} />
+          <Route path="/merchant-landing" element={<MerchantLanding />} />
+
           {/* Customer delivery flow */}
-          <Route path="/" element={<Landing />} />
+          <Route path="/order" element={<Landing />} />
           <Route path="/address" element={<AddressForm />} />
           <Route path="/summary" element={<OrderSummary />} />
           <Route path="/payment" element={<Payment />} />
@@ -45,9 +49,6 @@ const App: React.FC = () => {
           <Route path="/tracking/:orderId" element={<Tracking />} />
           <Route path="/chat/:orderId" element={<Chat />} />
           <Route path="/orders" element={<OrderHistory />} />
-
-          {/* Merchant landing (legacy) */}
-          <Route path="/merchant-landing" element={<MerchantLanding />} />
 
           {/* Merchant platform — public */}
           <Route path="/merchant" element={<MerchantLanding />} />

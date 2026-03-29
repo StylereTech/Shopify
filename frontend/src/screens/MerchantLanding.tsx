@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
 import stylereLogoUrl from '../assets/stylere_logo.jpg';
 
-const INSTALL_TOKEN = process.env.VITE_SHOPIFY_API_SECRET ?? '';
-const BASE_URL = 'https://api-production-653e.up.railway.app/shopify/dev-install';
+// No token needed — begin-install is a public endpoint
+const BASE_URL = 'https://api-production-653e.up.railway.app/shopify/begin-install';
 
 export const MerchantLanding: React.FC = () => {
   const formRef = useRef<HTMLDivElement>(null);
@@ -39,7 +39,7 @@ export const MerchantLanding: React.FC = () => {
       return;
     }
 
-    const url = `${BASE_URL}?shop=${encodeURIComponent(shop)}&token=${INSTALL_TOKEN}`;
+    const url = `${BASE_URL}?shop=${encodeURIComponent(shop)}`;
     setInstallUrl(url);
   };
 

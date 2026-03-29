@@ -145,6 +145,27 @@ export function createApp(config) {
         const install = await authService.beginInstall(query.shop);
         return res.redirect(install.redirectUrl);
     });
+    // Public install entry point — merchant enters their store name on the landing page
+    // No HMAC required (merchant-initiated, not Shopify-initiated)
+    app.get('/shopify/begin-install', async (req, res) => {
+        const shop = req.query.shop;
+        if (!shop || !shop.endsWith('.myshopify.com')) {
+            return res.status(400).json({ error: 'Valid shop param required (e.g. your-store.myshopify.com)' });
+        }
+        const install = await authService.beginInstall(shop);
+        return res.redirect(install.redirectUrl);
+    });
+    // Merchant delivery config — public read endpoint for frontend/integration checks
+    app.get('/shopify/merchant-config', async (req, res) => {
+        const shopDomain = req.query.shop;
+        if (!shopDomain)
+            return res.status(400).json({ error: 'shop required' });
+        const merchantConfig = await deps.merchantConfigs.getByShopDomain(shopDomain);
+        if (!merchantConfig) {
+            return res.status(404).json({ error: 'Merchant config not found', shop: shopDomain });
+        }
+        return res.json(merchantConfig);
+    });
     // Merchant dashboard redirect — when Shopify loads the app, redirect to frontend
     app.get('/shopify/dashboard', async (req, res) => {
         const shop = req.query.shop;
@@ -195,10 +216,26 @@ export function createApp(config) {
             });
         }
         const token = tokenVault.decrypt(installation.encryptedAccessToken);
-        const locations = await locationService.listLocations(shopDomain, token);
-        const prerequisiteStatus = await carrierServiceManager.checkPrerequisites(shopDomain, token);
+        let locations = [];
+        let prerequisiteStatus = { eligibilityUnknown: true, note: 'Not checked' };
+        let shopifyApiOk = true;
+        try {
+            locations = await locationService.listLocations(shopDomain, token);
+        }
+        catch (err) {
+            deps.logger.warn('onboarding/status: listLocations failed (token may be expired)', { shopDomain, error: String(err) });
+            shopifyApiOk = false;
+        }
+        try {
+            prerequisiteStatus = await carrierServiceManager.checkPrerequisites(shopDomain, token);
+        }
+        catch (err) {
+            deps.logger.warn('onboarding/status: checkPrerequisites failed', { shopDomain, error: String(err) });
+        }
         const storreeConnectivity = await storreeClient.checkConnectivity();
         const reasons = [];
+        if (!shopifyApiOk)
+            reasons.push('Shopify API unreachable — access token may be expired. Re-install may be required.');
         if (!installation.carrierServiceId)
             reasons.push('Carrier service is not registered.');
         if (!merchantConfig)
@@ -210,7 +247,8 @@ export function createApp(config) {
         return res.json({
             appInstalled: true,
             tokenPresent: true,
-            oauthValid: true,
+            oauthValid: shopifyApiOk,
+            shopifyApiReachable: shopifyApiOk,
             carrierServiceRegistered: !!installation.carrierServiceId,
             complianceConfigExpected: true,
             pickupLocationConfigured: !!merchantConfig?.pickupLocation,
