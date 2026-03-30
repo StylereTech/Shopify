@@ -1,5 +1,5 @@
 name = "Storree Local Delivery"
-client_id = "3f86157f6ceb5f77e4acc9ff798895cc"
+client_id = "c2af2e125a8ffa0ae080ed4b06e1daf9"
 application_url = "https://api-production-653e.up.railway.app/shopify/dashboard"
 embedded = false
 
