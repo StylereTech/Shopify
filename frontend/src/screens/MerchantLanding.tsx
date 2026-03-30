@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import stylereLogoUrl from '../assets/stylere_logo.jpg';
+import heroBg from '../assets/hero-driver.jpg';
 
 // No token needed — begin-install is a public endpoint
 const BASE_URL = 'https://api-production-653e.up.railway.app/shopify/begin-install';
@@ -47,29 +48,40 @@ export const MerchantLanding: React.FC = () => {
     <div className="font-sans bg-[#FAF9F7] text-[#1C1917] min-h-screen overflow-x-hidden">
 
       {/* ── HERO ─────────────────────────────────────────────────── */}
-      <section className="bg-[#1C1917] px-6 pt-14 pb-16 text-center">
-        <div className="max-w-lg mx-auto flex flex-col items-center gap-6">
-          <img src={stylereLogoUrl} alt="Style.re" className="h-11 w-auto rounded-xl object-contain" />
+      <section style={{ background: '#1C1917' }}>
+        {/* Text block — clean, no image behind it */}
+        <div className="px-6 pt-12 pb-8 text-center">
+          <div className="max-w-lg mx-auto flex flex-col items-center gap-5">
+            <img src={stylereLogoUrl} alt="Style.re" className="h-10 w-auto rounded-xl object-contain" />
 
-          <div>
-            <h1 className="text-[clamp(1.8rem,5vw,2.8rem)] font-bold text-white leading-[1.12] tracking-tight mb-4">
+            <h1 className="text-[clamp(1.75rem,5vw,2.8rem)] font-bold text-white leading-[1.12] tracking-tight">
               Offer same-hour delivery.<br />Keep every sale.
             </h1>
-            <p className="text-[#A8A29E] text-[clamp(0.95rem,2vw,1.1rem)] leading-relaxed max-w-md mx-auto">
+            <p className="text-[#A8A29E] text-[clamp(0.9rem,2vw,1.05rem)] leading-relaxed max-w-sm mx-auto">
               Add Storree to your Shopify store in 2 minutes. Your customers get fashion delivered within the hour.
             </p>
+
+            <button
+              onClick={scrollToForm}
+              className="bg-[#E8621A] text-white font-bold rounded-2xl px-8 py-4 text-[15px] tracking-wide active:scale-[0.98] transition-all duration-150 shadow-[0_4px_24px_rgba(232,98,26,0.35)] min-h-[52px]"
+            >
+              Install Free →
+            </button>
+
+            <p className="text-[#57534E] text-[12px]">
+              Pay per delivery · Cancel anytime · Works with any Shopify store
+            </p>
           </div>
+        </div>
 
-          <button
-            onClick={scrollToForm}
-            className="bg-[#E8621A] text-white font-bold rounded-2xl px-8 py-4 text-[15px] tracking-wide active:scale-[0.98] transition-all duration-150 shadow-[0_4px_24px_rgba(232,98,26,0.35)] min-h-[52px]"
-          >
-            Install Free →
-          </button>
-
-          <p className="text-[#78716C] text-[13px]">
-            No monthly fees · Cancel anytime · Works with any Shopify store
-          </p>
+        {/* Hero image — below text, full width, no overlap */}
+        <div className="w-full overflow-hidden" style={{ maxHeight: '380px' }}>
+          <img
+            src={heroBg}
+            alt="Storree delivery"
+            className="w-full object-cover object-top"
+            style={{ display: 'block', maxHeight: '380px' }}
+          />
         </div>
       </section>
 
