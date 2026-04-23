@@ -59,7 +59,7 @@ describe('shopify install/auth', () => {
       scopes: 'read_orders',
       installationRepo: new InMemoryShopInstallationRepository(),
       oauthStateRepo: oauthStates,
-      carrierServiceManager: { ensureCarrierService: async () => 'gid://carrier/1' } as CarrierServiceManager,
+      carrierServiceManager: { ensureCarrierService: async () => 'gid://carrier/1' } as unknown as CarrierServiceManager,
       tokenVault: new TokenVault('a'.repeat(64)),
       auditLogs: new InMemoryAuditLogRepository()
     });

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Redis } from 'ioredis';
+import type { Redis } from 'ioredis';
 import { Logger } from '../../observability/logger.js';
 import { MetricsRegistry } from '../../observability/metrics.js';
 import { backoffDelayMs } from '../retry.js';

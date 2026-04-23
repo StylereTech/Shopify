@@ -1,5 +1,11 @@
 # Storree Shopify Delivery App
 
+Standalone Shopify app repo for Style.re / Storree local delivery.
+
+This repo is the source of truth for the Shopify app.
+It is intentionally separate from `Style.re1.1`.
+Do not treat `Style.re1.1/apps/shopify` as the primary app repo.
+
 Infrastructure-ready Shopify app baseline for Storree one-hour and same-day local delivery.
 
 ## Cycle 8 status
