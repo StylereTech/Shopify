@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import stylereLogoUrl from '../assets/stylere_logo.jpg';
-import heroBg from '../assets/hero-driver.jpg';
+import heroBg from '../assets/hero.png';
 
 // No token needed — begin-install is a public endpoint
 const BASE_URL = 'https://api-production-653e.up.railway.app/shopify/begin-install';
