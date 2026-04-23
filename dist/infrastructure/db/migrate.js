@@ -11,7 +11,10 @@ async function run() {
       applied_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-    const migrationsDir = path.resolve('src/infrastructure/db/migrations');
+    // Support both dev (src/) and prod (dist/) paths
+    const migrationsDir = path.resolve(process.env.NODE_ENV === 'production'
+        ? 'dist/infrastructure/db/migrations'
+        : 'src/infrastructure/db/migrations');
     const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
     const { rows: applied } = await pool.query('SELECT version FROM schema_migrations');
     const appliedSet = new Set(applied.map((r) => r.version));

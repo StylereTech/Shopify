@@ -131,7 +131,7 @@ describe('Stripe webhook hardening', () => {
       });
 
       let dispatchCalls = 0;
-      const origImport = global.__importDoorDash;
+      const origImport = (global as any).__importDoorDash;
       // We can't mock the import easily — instead verify order status unchanged
       const res = await request(app)
         .post('/api/payments/stripe-webhook')
