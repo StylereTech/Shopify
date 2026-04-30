@@ -17,7 +17,7 @@ import { setStorreeOrderRepository } from './api/orders.js';
 import { RedisDispatchQueue } from './infrastructure/queue/dispatch-queue.js';
 import { ConsoleLogger } from './observability/logger.js';
 import { MetricsRegistry } from './observability/metrics.js';
-import { StorreeApiClient, FakeStorreeClient } from './infrastructure/storree/storree-client.js';
+import { FakeStorreeClient } from './infrastructure/storree/storree-client.js';
 import { DoorDashDriveClient, DoorDashStorreeAdapter } from './infrastructure/doordash/doordash-client.js';
 import { runStartupChecks } from './operations/startup-checks.js';
 
@@ -44,9 +44,12 @@ const deps = {
 };
 
 // ─── Dispatch Provider Selection ─────────────────────────────────────────────
-// DISPATCH_PROVIDER=doordash (default prod) | storree | fake
+// Production is DoorDash Drive only. fake is local/test-only for safe development.
 let storreeClient;
-if (env.DISPATCH_PROVIDER === 'doordash' && env.DOORDASH_DEVELOPER_ID && env.DOORDASH_KEY_ID && env.DOORDASH_SIGNING_SECRET) {
+if (env.DISPATCH_PROVIDER === 'doordash') {
+  if (!env.DOORDASH_DEVELOPER_ID || !env.DOORDASH_KEY_ID || !env.DOORDASH_SIGNING_SECRET) {
+    throw new Error('DoorDash Drive credentials are required when DISPATCH_PROVIDER=doordash');
+  }
   const dd = new DoorDashDriveClient({
     developerId: env.DOORDASH_DEVELOPER_ID,
     keyId: env.DOORDASH_KEY_ID,
@@ -63,15 +66,10 @@ if (env.DISPATCH_PROVIDER === 'doordash' && env.DOORDASH_DEVELOPER_ID && env.DOO
     googleMapsKey: env.GOOGLE_MAPS_API_KEY,
   });
   logger.info('Dispatch provider: DoorDash Drive');
-} else if (env.DISPATCH_PROVIDER === 'storree') {
-  storreeClient = new StorreeApiClient(
-    env.STORREE_API_BASE_URL!,
-    env.STORREE_API_KEY!,
-    env.STORREE_TIMEOUT_MS,
-    env.STORREE_MAX_RETRIES
-  );
-  logger.info('Dispatch provider: Storree API');
 } else {
+  if (env.NODE_ENV === 'production') {
+    throw new Error('Fake dispatch provider is forbidden in production');
+  }
   storreeClient = new FakeStorreeClient();
   logger.info('Dispatch provider: Fake (no credentials configured)');
 }

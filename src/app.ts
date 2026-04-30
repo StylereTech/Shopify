@@ -321,14 +321,14 @@ export function createApp(config?: {
     } catch (err) {
       deps.logger.warn('onboarding/status: checkPrerequisites failed', { shopDomain, error: String(err) });
     }
-    const storreeConnectivity = await storreeClient.checkConnectivity();
+    const dispatchConnectivity = await storreeClient.checkConnectivity();
 
     const reasons: string[] = [];
     if (!shopifyApiOk) reasons.push('Shopify API unreachable — access token may be expired. Re-install may be required.');
     if (!installation.carrierServiceId) reasons.push('Carrier service is not registered.');
     if (!merchantConfig) reasons.push('Merchant delivery configuration is missing.');
     if (merchantConfig && !merchantConfig.pickupLocation) reasons.push('Pickup location is not configured.');
-    if (!storreeConnectivity) reasons.push('Storree connectivity check failed.');
+    if (!dispatchConnectivity) reasons.push('Dispatch provider connectivity check failed.');
 
     return res.json({
       appInstalled: true,
@@ -339,7 +339,7 @@ export function createApp(config?: {
       complianceConfigExpected: true,
       pickupLocationConfigured: !!merchantConfig?.pickupLocation,
       merchantConfigComplete: !!merchantConfig,
-      dispatchConnectivityOk: storreeConnectivity,
+      dispatchConnectivityOk: dispatchConnectivity,
       locations,
       carrierServicePrerequisites: prerequisiteStatus,
       merchantActionRequired:
@@ -418,8 +418,8 @@ export function createApp(config?: {
     const parsed = carrierRateRequestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const storreeHealthy = await storreeClient.checkConnectivity();
-    if (!storreeHealthy) {
+    const dispatchHealthy = await storreeClient.checkConnectivity();
+    if (!dispatchHealthy) {
       deps.metrics.increment('dispatch.connectivity_unhealthy');
       return res.json({ rates: [] });
     }
@@ -459,10 +459,10 @@ export function createApp(config?: {
       return res.status(401).json({ error: 'Invalid webhook signature' });
     }
 
-    const storreeHealthy = await storreeClient.checkConnectivity();
-    if (!storreeHealthy) {
+    const dispatchHealthy = await storreeClient.checkConnectivity();
+    if (!dispatchHealthy) {
       deps.metrics.increment('dispatch.connectivity_unhealthy');
-      return res.status(503).json({ error: 'Storree unavailable' });
+      return res.status(503).json({ error: 'Dispatch provider unavailable' });
     }
 
     const event: WebhookEvent = {

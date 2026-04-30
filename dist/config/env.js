@@ -7,7 +7,7 @@ const schema = z.object({
     SHOPIFY_API_KEY: z.string(),
     SHOPIFY_API_SECRET: z.string(),
     SHOPIFY_SCOPES: z.string().default('write_shipping,read_orders,read_locations'),
-    // Storree (kept for legacy/test; use DoorDash in prod)
+    // Legacy Storree transport retained for isolated tests only; production dispatch is DoorDash Drive only.
     STORREE_API_BASE_URL: z.string().url().optional().default('https://storree-placeholder.invalid'),
     STORREE_API_KEY: z.string().optional().default('placeholder'),
     STORREE_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
@@ -38,8 +38,8 @@ const schema = z.object({
     TWILIO_ACCOUNT_SID: z.string().optional(),
     TWILIO_AUTH_TOKEN: z.string().optional(),
     TWILIO_FROM_NUMBER: z.string().optional(),
-    // Dispatch provider (doordash | storree | fake)
-    DISPATCH_PROVIDER: z.enum(['doordash', 'storree', 'fake']).default('doordash'),
+    // Dispatch provider. Production must run DoorDash Drive; fake is local/test only.
+    DISPATCH_PROVIDER: z.enum(['doordash', 'fake']).default('doordash'),
     // Merchant platform
     MERCHANT_JWT_SECRET: z.string().optional().default('dev-merchant-jwt-secret-change-in-production'),
     MERCHANT_STRIPE_PRICE_ACCESS: z.string().optional(),

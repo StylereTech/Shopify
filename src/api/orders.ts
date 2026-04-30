@@ -124,6 +124,7 @@ async function dispatchOrderDirect(order: StorreeOrder): Promise<DoorDashDispatc
       dropoff_address: dropoffAddr,
       dropoff_phone_number: TWILIO_FROM_NUMBER || formatPhoneE164(contact.phone),
       dropoff_contact_given_name: (contact.name ?? 'Customer').split(' ')[0],
+      dropoff_contact_send_notifications: false,
       dropoff_instructions: order.notes || 'Please ring doorbell upon arrival.',
       order_value: Math.round((pricing.total ?? 0) * 100),
       pickup_window: {
@@ -399,7 +400,7 @@ export function createOrdersRouter(): Router {
       status: order.status,
       driverName: dasherName || (['assigned', 'picked_up', 'in_transit'].includes(order.status) ? 'Style.re Courier' : undefined),
       estimatedMinutes,
-      doordashTrackingUrl: order.doordashTrackingUrl,
+      trackingUrl: customerTrackingUrl(order.id),
       timeline,
     });
   });
@@ -527,7 +528,7 @@ export function createPaymentsRouter(): Router {
           success: true,
           orderId,
           dispatched: true,
-          trackingUrl: order.doordashTrackingUrl,
+          trackingUrl: customerTrackingUrl(order.id),
           idempotent: true,
         });
       }
@@ -560,7 +561,7 @@ export function createPaymentsRouter(): Router {
         success: true,
         orderId,
         dispatched: !!order.doordashExternalId,
-        trackingUrl: order.doordashTrackingUrl,
+        trackingUrl: customerTrackingUrl(order.id),
       });
     } catch (err) {
       console.error('Payment confirm error:', err);
@@ -723,12 +724,16 @@ function orderToResponse(order: StorreeOrder): Record<string, unknown> {
     paymentIntentId: order.paymentIntentId,
     stripePaymentIntentId: order.stripePaymentIntentId,
     paymentStatus: order.paymentStatus,
-    doordashDeliveryId: order.doordashDeliveryId,
-    doordashTrackingUrl: order.doordashTrackingUrl,
-    doordashExternalId: order.doordashExternalId,
+    deliveryId: order.dispatchId,
+    trackingUrl: customerTrackingUrl(order.id),
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
   };
+}
+
+function customerTrackingUrl(orderId: string): string {
+  const base = (process.env.FRONTEND_URL ?? 'https://stylere.app').replace(/\/$/, '');
+  return `${base}/shopify/tracking/${encodeURIComponent(orderId)}`;
 }
 
 function buildTimeline(order: StorreeOrder): Array<{ status: string; timestamp: string; description: string }> {

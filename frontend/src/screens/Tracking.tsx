@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import type { OrderStatus, TrackingEvent } from '../types';
+import type { OrderStatus, TrackingEvent, TrackingStatus } from '../types';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: 'Order Placed',
@@ -33,7 +33,7 @@ const STATUS_ORDER: OrderStatus[] = [
   'pending', 'confirmed', 'assigned', 'picked_up', 'in_transit', 'delivered',
 ];
 
-const getMockTracking = (orderId: string) => ({
+const getMockTracking = (orderId: string): TrackingStatus => ({
   orderId,
   status: 'in_transit' as OrderStatus,
   driverName: 'Style.re Courier',
@@ -163,14 +163,14 @@ export const Tracking: React.FC = () => {
 
             {/* Live Map */}
             <Card padding="none" className="overflow-hidden">
-              {(data as { doordashTrackingUrl?: string }).doordashTrackingUrl ? (
+              {data.trackingUrl ? (
                 <div className="p-5 flex flex-col gap-3">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-[#E8621A] animate-pulse" />
                     <p className="text-[13px] font-semibold text-[#1C1917]">Live courier tracking available</p>
                   </div>
                   <a
-                    href={(data as { doordashTrackingUrl?: string }).doordashTrackingUrl}
+                    href={data.trackingUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="w-full py-3.5 rounded-2xl bg-[#E8621A] text-white text-center text-[14px] font-bold active:scale-[0.98] transition-all duration-150"

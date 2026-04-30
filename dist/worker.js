@@ -7,7 +7,8 @@ import { ConsoleLogger } from './observability/logger.js';
 import { RedisDispatchWorker } from './infrastructure/queue/dispatch-queue.js';
 import { shopifyOrderWebhookSchema } from './shopify/schemas.js';
 import { MetricsRegistry } from './observability/metrics.js';
-import { StorreeApiClient, StorreeDispatchError } from './infrastructure/storree/storree-client.js';
+import { FakeStorreeClient, StorreeDispatchError } from './infrastructure/storree/storree-client.js';
+import { DoorDashDriveClient, DoorDashStorreeAdapter } from './infrastructure/doordash/doordash-client.js';
 import { runStartupChecks } from './operations/startup-checks.js';
 import { tryAdminAlert } from './infrastructure/sms-alert.js';
 import { startDispatchWatchdog } from './domain/dispatch-watchdog.js';
@@ -15,7 +16,34 @@ const pool = createPostgresPool(env.DATABASE_URL);
 const redis = new Redis(env.REDIS_URL);
 const logger = new ConsoleLogger();
 const metrics = new MetricsRegistry();
-const storreeClient = new StorreeApiClient(env.STORREE_API_BASE_URL, env.STORREE_API_KEY, env.STORREE_TIMEOUT_MS, env.STORREE_MAX_RETRIES);
+let storreeClient;
+if (env.DISPATCH_PROVIDER === 'doordash') {
+    if (!env.DOORDASH_DEVELOPER_ID || !env.DOORDASH_KEY_ID || !env.DOORDASH_SIGNING_SECRET) {
+        throw new Error('DoorDash Drive credentials are required when DISPATCH_PROVIDER=doordash');
+    }
+    storreeClient = new DoorDashStorreeAdapter({
+        doordash: new DoorDashDriveClient({
+            developerId: env.DOORDASH_DEVELOPER_ID,
+            keyId: env.DOORDASH_KEY_ID,
+            signingSecret: env.DOORDASH_SIGNING_SECRET,
+            baseUrl: env.DOORDASH_BASE_URL,
+            timeoutMs: 10_000,
+        }),
+        merchantPickupAddress: env.DEFAULT_PICKUP_ADDRESS ?? '1 Main St, Dallas, TX 75201',
+        merchantPickupPhone: env.DEFAULT_PICKUP_PHONE,
+        merchantPickupName: env.DEFAULT_PICKUP_NAME ?? 'Style.re Store',
+        twilioPhone: env.TWILIO_FROM_NUMBER,
+        googleMapsKey: env.GOOGLE_MAPS_API_KEY,
+    });
+    logger.info('Worker dispatch provider: DoorDash Drive');
+}
+else {
+    if (env.NODE_ENV === 'production') {
+        throw new Error('Fake dispatch provider is forbidden in production');
+    }
+    storreeClient = new FakeStorreeClient();
+    logger.info('Worker dispatch provider: Fake');
+}
 const checks = await runStartupChecks(pool, redis, storreeClient, logger, 'worker');
 if (!checks.dbOk || !checks.redisOk) {
     logger.error('Critical dependencies unavailable. Worker refusing startup.');

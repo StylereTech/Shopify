@@ -263,6 +263,7 @@ export class DoorDashStorreeAdapter implements StorreeClient {
         // Drop-off — use Twilio intermediary phone so driver contacts us
         dropoff_phone_number: this.twiliPhone,
         dropoff_contact_given_name: 'Customer',
+        dropoff_contact_send_notifications: false,
         dropoff_instructions: 'Please follow building signage. Ring doorbell or call upon arrival.',
         // Build a string address from coords via Google reverse geocode
         dropoff_address: await this.reverseGeocode(request.dropoff.lat, request.dropoff.lng),

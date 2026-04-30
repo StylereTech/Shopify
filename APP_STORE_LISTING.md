@@ -26,14 +26,14 @@ Offer same-hour local delivery from your Shopify store. Customers order, we disp
 ```
 Storree turns your Shopify boutique into a same-hour delivery powerhouse — no warehouse, no logistics team, no hassle.
 
-When a customer checks out and chooses local delivery, Storree instantly dispatches a courier from your store to their door. They track every step in real time. You keep the sale.
+When a customer checks out and chooses local delivery, Storree dispatches a courier from your store to their door. They track every step in real time. You keep the sale.
 
 ─── HOW IT WORKS ───
 
 1. Install Storree from the App Store (takes 2 minutes)
 2. Enter your store's pickup address in the app dashboard
 3. Storree automatically adds "Storree Local Delivery" as a shipping option at your checkout
-4. Customer places order → courier is dispatched immediately
+4. Customer places order → Storree dispatches a courier
 5. Customer receives a live tracking link via SMS
 
 No code changes to your store. No theme editing. No developer required.
@@ -46,8 +46,8 @@ Same-day delivery used to be only for big-box retailers. Now it's yours.
 
 ─── KEY FEATURES ───
 
-✓ Same-hour local delivery — courier dispatched the moment the order is placed
-✓ Live tracking — customers track their courier on a map in real time
+✓ Same-hour local delivery — courier dispatch from the merchant's store
+✓ Live tracking — customers track their order through Storree/Style.re
 ✓ 2-minute setup — no code, no developer, no complicated configuration
 ✓ No monthly fees — pay only per delivery, nothing when you're not using it
 ✓ Works with your existing checkout — fully integrated with Shopify shipping
@@ -78,8 +78,8 @@ Questions? Our team responds fast.
 
 ## Key Benefits (5 bullets)
 
-1. **Same-hour local delivery** — courier dispatched the moment order is placed
-2. **Live tracking** — customer tracks every step in real time
+1. **Same-hour local delivery** — courier dispatch from your store
+2. **Live tracking** — customer tracks every step through Storree/Style.re
 3. **2-minute setup** — connect your store, set pickup address, go live
 4. **No monthly fees** — pay only when you deliver
 5. **Works with your existing checkout** — no code changes required
@@ -125,8 +125,9 @@ Questions? Our team responds fast.
 
 | Field | URL |
 |---|---|
-| App URL | `https://api-production-653e.up.railway.app/api/shopify/auth` |
-| Redirect URL | `https://api-production-653e.up.railway.app/api/shopify/callback` |
+| App URL | `https://api-production-653e.up.railway.app/shopify/dashboard` |
+| Install URL | `https://api-production-653e.up.railway.app/shopify/begin-install` |
+| Redirect URL | `https://api-production-653e.up.railway.app/shopify/auth/callback` |
 | Privacy Policy | `https://stylere.app/shopify/privacy` |
 | Terms of Service | `https://stylere.app/shopify/terms` |
 | Support | `https://stylere.app/shopify/support` |
@@ -144,5 +145,5 @@ Questions? Our team responds fast.
 ### Screenshot ideas:
 1. Merchant dashboard — pickup address configured, delivery enabled
 2. Customer checkout — "Storree Local Delivery" shipping option visible
-3. Live tracking page — courier on map
+3. Live tracking page — Storree/Style.re order tracking
 4. Order confirmation with delivery ETA

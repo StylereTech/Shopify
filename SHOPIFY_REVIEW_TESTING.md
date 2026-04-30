@@ -80,9 +80,10 @@ For the purposes of app review, the delivery dispatch and tracking flow can be d
 
 1. In the Storree merchant dashboard, locate the new order
 2. Confirm the order shows as "Pending" or "Dispatching"
-3. In test/demo mode, a simulated courier is assigned
+3. In production mode, Storree dispatches through DoorDash Drive internally while keeping the customer experience under Storree/Style.re branding
+4. In any review/test environment where live courier creation is disabled, the dashboard will show the safe simulated courier path
 
-> ✅ **Expected result:** Order status updates in the dashboard. Dispatch is initiated.
+> ✅ **Expected result:** Order status updates in the dashboard. Dispatch is initiated without exposing third-party courier branding to the customer.
 
 ---
 
@@ -128,6 +129,6 @@ For the purposes of app review, the delivery dispatch and tracking flow can be d
 
 | Limitation | Details |
 |---|---|
-| Real courier dispatch | In test mode, courier dispatch uses a simulated driver — no real delivery occurs |
+| Real courier dispatch | Production dispatch uses DoorDash Drive internally; review/test mode may use a simulated courier so no real delivery occurs |
 | SMS notifications | Test SMS may not deliver to all carriers; contact support if not received |
 | Carrier-calculated shipping | Requires Advanced plan on non-development stores |

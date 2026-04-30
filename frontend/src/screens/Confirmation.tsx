@@ -95,9 +95,9 @@ export const Confirmation: React.FC = () => {
           >
             Track My Order →
           </Button>
-          {currentOrder?.doordashTrackingUrl && (
+          {currentOrder?.trackingUrl && (
             <a
-              href={currentOrder.doordashTrackingUrl}
+              href={currentOrder.trackingUrl}
               target="_blank"
               rel="noreferrer"
               className="w-full py-4 rounded-2xl text-center text-[15px] font-bold bg-[#E8621A] text-white active:scale-[0.98] transition-all duration-150 min-h-[52px] flex items-center justify-center"

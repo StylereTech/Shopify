@@ -2,8 +2,10 @@
 
 ## Application Configuration
 - [x] `.env` schema defined (`src/config/env.ts`).
-- [x] Storree API auth/timeout/retry env contract defined.
-- [x] Startup self-checks for DB/Redis/Storree implemented.
+- [x] DoorDash Drive production dispatch env contract defined.
+- [x] `DISPATCH_PROVIDER=doordash` is the default and only production dispatch mode.
+- [x] `DISPATCH_PROVIDER=fake` is local/test only and blocked in production.
+- [x] Startup self-checks for DB/Redis/dispatch provider implemented.
 - [ ] Production secrets managed via secret manager/KMS.
 
 ## Shopify Setup
@@ -20,16 +22,18 @@
 - [x] Dispatch attempt persistence includes retry/error/provider metadata.
 
 ## Reliability
-- [x] Real Storree transport implemented.
+- [x] DoorDash Drive transport implemented.
 - [x] Retry classification (retryable vs terminal) implemented.
-- [x] Readiness probe checks DB, Redis, and Storree connectivity.
-- [x] Fail-closed behavior when Storree connectivity is unhealthy.
+- [x] Readiness probe checks DB, Redis, and dispatch provider connectivity.
+- [x] Fail-closed behavior when dispatch connectivity is unhealthy.
 - [x] Carrier-service prerequisite visibility added to onboarding readiness output.
 
-## Security
+## Security + Brand Boundary
 - [x] Webhook HMAC verification implemented.
 - [x] OAuth state replay/expiry checks implemented.
 - [x] Token encryption boundary implemented.
+- [x] Customer-facing tracking response uses Style.re/Storree URL, not DoorDash tracking URL.
+- [x] DoorDash customer notifications are disabled so customer messaging stays white-label.
 - [ ] KMS/HSM key lifecycle automation implemented.
 
 ## Observability
@@ -40,5 +44,8 @@
 ## Live Launch Validation Evidence (required for GO)
 - [ ] Dev-store install validated end-to-end.
 - [ ] Dev-store carrier-service rate callback verified at checkout.
-- [ ] Dispatch execution path validated against Storree (mock or live).
+- [ ] Dispatch execution path validated against DoorDash Drive.
 - [ ] Evidence captured in `DEV_STORE_VALIDATION_REPORT.md` and `LAUNCH_READINESS_REPORT.md`.
+
+## Current dashboard blocker
+- [ ] Shopify Partners dashboard currently requires browser connection verification before automated submission can proceed.

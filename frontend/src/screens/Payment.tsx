@@ -105,7 +105,7 @@ const PaymentForm: React.FC = () => {
       if (paymentIntent?.status === 'succeeded') {
         const confirmResult = await api.confirmPayment(paymentIntentId, draft.orderId!);
         if ('trackingUrl' in confirmResult && confirmResult.trackingUrl && currentOrder) {
-          setCurrentOrder({ ...currentOrder, doordashTrackingUrl: confirmResult.trackingUrl as string });
+          setCurrentOrder({ ...currentOrder, trackingUrl: confirmResult.trackingUrl as string });
         }
         setSuccess(true);
         setTimeout(() => navigate('/confirmation'), 1000);
