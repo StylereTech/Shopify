@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["npm ci --include=dev"]
+
+[phases.build]
+cmds = ["npm run build", "cp -r src/infrastructure/db/migrations dist/infrastructure/db/migrations"]
+
+[start]
+cmd = "node dist/infrastructure/db/migrate.js && node dist/server.js"
