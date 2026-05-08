@@ -256,7 +256,7 @@ export function createApp(config?: {
   // Merchant dashboard redirect — when Shopify loads the app, redirect to frontend
   app.get('/shopify/dashboard', async (req, res) => {
     const shop = req.query.shop as string | undefined;
-    const frontendUrl = 'https://stylere-shopify-delivery-7fkzbujzs-styleres-projects.vercel.app/merchant';
+    const frontendUrl = 'https://delivery.stylere.app/merchant';
     return res.redirect(shop ? `${frontendUrl}?shop=${shop}` : frontendUrl);
   });
 

@@ -232,7 +232,7 @@ export function createMerchantRouter(): express.Router {
 
         if (priceId) {
           const appUrl = process.env.APP_URL ?? 'https://api-production-653e.up.railway.app';
-          const frontendUrl = process.env.FRONTEND_URL ?? 'https://stylere-shopify-delivery.vercel.app';
+          const frontendUrl = process.env.FRONTEND_URL ?? 'https://delivery.stylere.app';
 
           // Create or find Stripe customer
           const customer = await stripe.customers.create({
@@ -409,7 +409,7 @@ export function createMerchantRouter(): express.Router {
           await pool.end();
         }
 
-        const frontendUrl = process.env.FRONTEND_URL ?? 'https://stylere-shopify-delivery.vercel.app';
+        const frontendUrl = process.env.FRONTEND_URL ?? 'https://delivery.stylere.app';
         const session = await stripe.checkout.sessions.create({
           customer: customerId,
           mode: 'subscription',
@@ -464,7 +464,7 @@ export function createMerchantRouter(): express.Router {
           return res.status(400).json({ error: 'No Stripe customer associated with this account' });
         }
 
-        const frontendUrl = process.env.FRONTEND_URL ?? 'https://stylere-shopify-delivery.vercel.app';
+        const frontendUrl = process.env.FRONTEND_URL ?? 'https://delivery.stylere.app';
         const session = await stripe.billingPortal.sessions.create({
           customer: merchant.stripe_customer_id,
           return_url: `${frontendUrl}/shopify/merchant/dashboard`
