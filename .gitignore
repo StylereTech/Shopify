@@ -4,6 +4,7 @@ dist/
 .env.local
 .env.staging
 .env.*
+!.env.example
 coverage/
 *.log
 *.map
