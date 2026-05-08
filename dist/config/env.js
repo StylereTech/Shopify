@@ -44,6 +44,6 @@ const schema = z.object({
     MERCHANT_JWT_SECRET: z.string().optional().default('dev-merchant-jwt-secret-change-in-production'),
     MERCHANT_STRIPE_PRICE_ACCESS: z.string().optional(),
     MERCHANT_STRIPE_PRICE_GROWTH: z.string().optional(),
-    FRONTEND_URL: z.string().optional().default('https://stylere-shopify-delivery.vercel.app'),
+    FRONTEND_URL: z.string().optional().default('https://delivery.stylere.app'),
 });
 export const env = schema.parse(process.env);
