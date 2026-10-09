@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/shopify/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/shopify/favicon.png", "destination": "/favicon.png" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "buildCommand": "npm run build",
