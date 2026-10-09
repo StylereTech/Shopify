@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useMerchantAuth } from '../context/merchantAuthState';
 
 const API = import.meta.env.VITE_API_URL ?? (import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app');
 

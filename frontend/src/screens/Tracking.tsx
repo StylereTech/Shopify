@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
 import { Card } from '../components/ui';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import type { OrderStatus, TrackingEvent, TrackingStatus } from '../types';
+import type { OrderStatus, TrackingEvent } from '../types';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   pending: 'Order Placed',
@@ -33,38 +33,24 @@ const STATUS_ORDER: OrderStatus[] = [
   'pending', 'confirmed', 'assigned', 'picked_up', 'in_transit', 'delivered',
 ];
 
-const getMockTracking = (orderId: string): TrackingStatus => ({
-  orderId,
-  status: 'in_transit' as OrderStatus,
-  driverName: 'Style.re Courier',
-  estimatedMinutes: 12,
-  timeline: [
-    { status: 'pending' as OrderStatus, timestamp: new Date(Date.now() - 25 * 60000).toISOString(), description: 'Order placed and confirmed' },
-    { status: 'confirmed' as OrderStatus, timestamp: new Date(Date.now() - 20 * 60000).toISOString(), description: 'Payment verified' },
-    { status: 'assigned' as OrderStatus, timestamp: new Date(Date.now() - 15 * 60000).toISOString(), description: 'Style.re courier assigned' },
-    { status: 'picked_up' as OrderStatus, timestamp: new Date(Date.now() - 8 * 60000).toISOString(), description: 'Items picked up from store' },
-    { status: 'in_transit' as OrderStatus, timestamp: new Date(Date.now() - 2 * 60000).toISOString(), description: 'Out for delivery' },
-  ],
-});
-
 export const Tracking: React.FC = () => {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const [useMock, setUseMock] = useState(false);
-
-  const { data: tracking, isLoading, error } = useQuery({
+  const { data: order, isLoading: orderLoading, error: orderError } = useQuery({
+    queryKey: ['tracking-order', orderId],
+    queryFn: () => api.getOrder(orderId!),
+    retry: 1,
+    enabled: !!orderId,
+  });
+  const { data, isLoading: trackingLoading, error: trackingError } = useQuery({
     queryKey: ['tracking', orderId],
     queryFn: () => api.getTracking(orderId!),
     refetchInterval: 15000,
     retry: 1,
-    enabled: !!orderId && !useMock,
+    enabled: order?.paymentStatus === 'paid',
   });
-
-  useEffect(() => {
-    if (error) setUseMock(true);
-  }, [error]);
-
-  const data = useMock ? getMockTracking(orderId ?? 'ORDER') : tracking;
+  const isLoading = orderLoading || trackingLoading;
+  const error = orderError || trackingError;
   const currentStatusIndex = STATUS_ORDER.indexOf(data?.status as OrderStatus);
   const visibleStatuses = STATUS_ORDER.filter(s => s !== 'cancelled' && s !== 'failed');
 
@@ -73,7 +59,7 @@ export const Tracking: React.FC = () => {
   return (
     <AppShell title="Live Tracking" showBack showNav={false}>
       <div className="px-5 py-6 flex flex-col gap-5">
-        {isLoading && !useMock ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">
             <LoadingSpinner size="lg" />
             <p className="text-[14px] text-[#78716C]">Loading tracking info…</p>
@@ -247,7 +233,7 @@ export const Tracking: React.FC = () => {
         ) : (
           <Card>
             <div className="py-10 text-center">
-              <p className="text-[#78716C] text-[15px] mb-4">Tracking information unavailable.</p>
+              <p className="text-[#78716C] text-[15px] mb-4">{error ? 'Could not load live tracking. Please try again later.' : order?.paymentStatus === 'unpaid' ? 'Tracking is available after payment is confirmed.' : 'Tracking information unavailable.'}</p>
               <button
                 onClick={() => navigate('/')}
                 className="text-[#E8621A] text-[14px] font-semibold"

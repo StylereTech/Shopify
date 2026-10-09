@@ -57,8 +57,9 @@ export const MerchantOrderDetail: React.FC = () => {
       .orderDetail(id)
       .then((data) => {
         // API may return the order directly or wrapped in {order, tracking}
-        const orderData = (data as any).order ?? data;
-        const trackingData = (data as any).tracking ?? [];
+        const wrapped = data as unknown as { order?: Order; tracking?: TrackingEvent[] };
+        const orderData = wrapped.order ?? data;
+        const trackingData = Array.isArray(wrapped.tracking) ? wrapped.tracking : [];
         setOrder(orderData as Order);
         setTracking(trackingData);
         setLoading(false);

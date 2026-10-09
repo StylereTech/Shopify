@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useMerchantAuth } from '../../context/MerchantAuthContext';
+import { useMerchantAuth } from '../../context/merchantAuthState';
 
 export const MerchantLogin: React.FC = () => {
   const navigate = useNavigate();

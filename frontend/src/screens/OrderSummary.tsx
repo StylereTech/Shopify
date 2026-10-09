@@ -1,35 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useOrderStore } from '../store/orderStore';
 import { api } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
 import { Button, Card } from '../components/ui';
-import type { PricingQuote } from '../types';
 
-const formatAddress = (addr: Partial<{ street: string; city: string; state: string; zip: string; unit?: string }>) =>
-  [addr.street, addr.unit, addr.city, addr.state, addr.zip].filter(Boolean).join(', ');
+const formatAddress = (addr: Partial<{ street: string; city: string; state: string; zip: string; unit?: string }> | undefined) =>
+  [addr?.street, addr?.unit, addr?.city, addr?.state, addr?.zip].filter(Boolean).join(', ');
 
 const formatMoney = (cents: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents);
 
 export const OrderSummary: React.FC = () => {
   const navigate = useNavigate();
-  const { draft, setPricing } = useOrderStore();
-  const [quote, setQuote] = useState<PricingQuote | null>(draft.pricing ?? null);
-  const [loading, setLoading] = useState(!draft.pricing);
+  const { draft, setPricing, setOrderId, setCurrentOrder } = useOrderStore();
+  const hasAddresses = Boolean(draft.serviceType && draft.pickupAddress && draft.dropoffAddress && draft.contact);
+  const { data: order, isLoading: loading, isError } = useQuery({
+    queryKey: ['checkout-order', draft.orderId ?? '', draft.serviceType, draft.pickupAddress, draft.dropoffAddress, draft.contact, draft.items, draft.notes],
+    queryFn: () => draft.orderId ? api.getOrder(draft.orderId) : api.createOrder(draft),
+    enabled: hasAddresses,
+    retry: false,
+    staleTime: Infinity,
+  });
+  const quote = order?.pricing;
+  const validQuote = Boolean(order?.id && quote && Number.isFinite(quote.total) && quote.total > 0);
 
   useEffect(() => {
-    if (draft.pricing) return;
-    api.getQuote(draft).then((q) => {
-      setQuote(q);
-      setPricing(q);
-      setLoading(false);
-    });
-  }, []);
+    if (order && validQuote) {
+      setCurrentOrder(order);
+      setOrderId(order.id);
+      setPricing(order.pricing);
+    }
+  }, [order, validQuote, setCurrentOrder, setOrderId, setPricing]);
 
-  if (!draft.serviceType || !draft.pickupAddress || !draft.dropoffAddress) {
-    navigate('/');
-    return null;
+  if (!hasAddresses) {
+    return <AppShell title="Order Summary" showBack showNav={false}><div className="px-5 py-8 text-sm text-[#78716C]">Complete the delivery form to see your price.</div></AppShell>;
   }
 
   return (
@@ -104,7 +110,7 @@ export const OrderSummary: React.FC = () => {
               <div className="w-4 h-4 border-2 border-[#F97316] border-t-transparent rounded-full animate-spin" />
               Calculating price...
             </div>
-          ) : quote ? (
+          ) : validQuote && quote ? (
             <div className="flex flex-col gap-2 text-sm">
               <div className="flex justify-between text-[#78716C]">
                 <span>Delivery Fee</span>
@@ -131,11 +137,11 @@ export const OrderSummary: React.FC = () => {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-red-500">Failed to load pricing</p>
+            <p className="text-sm text-red-500" role="alert">{isError ? 'Could not reach the order service. Please try again later.' : 'A verified price is unavailable.'}</p>
           )}
         </Card>
 
-        <Button size="lg" fullWidth onClick={() => navigate('/payment')} disabled={loading}>
+        <Button size="lg" fullWidth onClick={() => navigate('/payment')} disabled={loading || !validQuote}>
           Proceed to Payment →
         </Button>
 

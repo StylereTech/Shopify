@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useMerchantAuth } from '../context/merchantAuthState';
 
 export function MerchantProtectedRoute({ children }: { children: React.ReactNode }) {
   const { merchant, loading } = useMerchantAuth();

@@ -35,31 +35,34 @@ export const useOrderStore = create<OrderStore>()(
       currentOrder: null,
 
       setServiceType: (type) =>
-        set((s) => ({ draft: { ...s.draft, serviceType: type } })),
+        set((s) => ({ draft: { ...s.draft, serviceType: type, pricing: undefined, orderId: undefined, paymentIntentId: undefined }, currentOrder: null })),
 
       setPickupAddress: (addr) =>
         set((s) => ({
-          draft: { ...s.draft, pickupAddress: { ...s.draft.pickupAddress, ...addr } },
+          draft: { ...s.draft, pickupAddress: { ...s.draft.pickupAddress, ...addr }, pricing: undefined, orderId: undefined, paymentIntentId: undefined },
+          currentOrder: null,
         })),
 
       setDropoffAddress: (addr) =>
         set((s) => ({
-          draft: { ...s.draft, dropoffAddress: { ...s.draft.dropoffAddress, ...addr } },
+          draft: { ...s.draft, dropoffAddress: { ...s.draft.dropoffAddress, ...addr }, pricing: undefined, orderId: undefined, paymentIntentId: undefined },
+          currentOrder: null,
         })),
 
       setContact: (contact) =>
         set((s) => ({
-          draft: { ...s.draft, contact: { ...s.draft.contact, ...contact } },
+          draft: { ...s.draft, contact: { ...s.draft.contact, ...contact }, pricing: undefined, orderId: undefined, paymentIntentId: undefined },
+          currentOrder: null,
         })),
 
       setNotes: (notes) =>
-        set((s) => ({ draft: { ...s.draft, notes } })),
+        set((s) => ({ draft: { ...s.draft, notes, pricing: undefined, orderId: undefined, paymentIntentId: undefined }, currentOrder: null })),
 
       setItems: (items) =>
-        set((s) => ({ draft: { ...s.draft, items } })),
+        set((s) => ({ draft: { ...s.draft, items, pricing: undefined, orderId: undefined, paymentIntentId: undefined }, currentOrder: null })),
 
       setSelectedStore: (store) =>
-        set((s) => ({ draft: { ...s.draft, selectedStore: store } })),
+        set((s) => ({ draft: { ...s.draft, selectedStore: store, pricing: undefined, orderId: undefined, paymentIntentId: undefined }, currentOrder: null })),
 
       setPricing: (pricing) =>
         set((s) => ({ draft: { ...s.draft, pricing } })),

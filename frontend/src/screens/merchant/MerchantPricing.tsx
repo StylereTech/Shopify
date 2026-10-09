@@ -2,45 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { merchantApi, type Plan } from '../../api/merchantApi';
 
-// Fallback plans if API is unavailable
-const FALLBACK_PLANS: Plan[] = [
-  {
-    id: 'access',
-    name: 'Stowry Access',
-    price_cents: 10000,
-    price_display: '$100',
-    popular: false,
-    features: [
-      'Merchant dashboard',
-      'Order tracking',
-      'Order history',
-      'Basic reporting',
-      'Basic support',
-      'Manual order creation',
-    ],
-  },
-  {
-    id: 'growth',
-    name: 'Stowry Growth',
-    price_cents: 20000,
-    price_display: '$200',
-    popular: true,
-    features: [
-      'Everything in Access',
-      'Priority dispatch',
-      'Priority drivers',
-      'Advanced analytics',
-      'Multi-user staff accounts',
-      'Premium support',
-      'Preferred onboarding',
-    ],
-  },
-];
-
 export const MerchantPricing: React.FC = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     merchantApi
@@ -48,10 +14,12 @@ export const MerchantPricing: React.FC = () => {
       .then((data) => {
         if (data.plans && data.plans.length > 0) {
           setPlans(data.plans);
+        } else {
+          setError(true);
         }
       })
       .catch(() => {
-        // Use fallback plans on error
+        setError(true);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -86,6 +54,8 @@ export const MerchantPricing: React.FC = () => {
       <section style={{ display: 'flex', gap: 24, justifyContent: 'center', padding: '0 24px 80px', flexWrap: 'wrap' }}>
         {loading ? (
           <div style={{ color: '#71717a', padding: 40 }}>Loading plans...</div>
+        ) : error ? (
+          <p role="alert" style={{ color: '#fca5a5', padding: 40 }}>Current plans are unavailable. Please try again later.</p>
         ) : (
           plans.map((plan) => (
             <div

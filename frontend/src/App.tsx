@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Landing } from './screens/Landing';
 import { AddressForm } from './screens/AddressForm';
 import { OrderSummary } from './screens/OrderSummary';
-import { Payment } from './screens/Payment';
 import { Confirmation } from './screens/Confirmation';
 import { Tracking } from './screens/Tracking';
 import { Chat } from './screens/Chat';
@@ -20,6 +19,9 @@ import { MerchantLogin } from './screens/merchant/MerchantLogin';
 import { MerchantOrderDetail } from './screens/merchant/MerchantOrderDetail';
 import { MerchantAuthProvider } from './context/MerchantAuthContext';
 import { MerchantProtectedRoute } from './components/MerchantProtectedRoute';
+
+// Payment loads Stripe only when a customer reaches the payment route.
+const Payment = React.lazy(() => import('./screens/Payment').then(({ Payment }) => ({ default: Payment })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,7 +46,7 @@ const App: React.FC = () => {
           <Route path="/order" element={<Landing />} />
           <Route path="/address" element={<AddressForm />} />
           <Route path="/summary" element={<OrderSummary />} />
-          <Route path="/payment" element={<Payment />} />
+          <Route path="/payment" element={<React.Suspense fallback={<div role="status">Loading payment…</div>}><Payment /></React.Suspense>} />
           <Route path="/confirmation" element={<Confirmation />} />
           <Route path="/tracking/:orderId" element={<Tracking />} />
           <Route path="/chat/:orderId" element={<Chat />} />
