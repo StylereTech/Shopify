@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? 'https://api-production-653e.up.railway.app';
+const BASE = import.meta.env.VITE_API_URL ?? '/shopify';
 
 function getToken(): string | null {
   return localStorage.getItem('merchant_token');

@@ -3,7 +3,7 @@ import stylereLogoUrl from '../assets/stylere_logo.jpg';
 import heroBg from '../assets/hero-driver.jpg';
 
 // No token needed — begin-install is a public endpoint
-const BASE_URL = 'https://api-production-653e.up.railway.app/shopify/begin-install';
+const BASE_URL = '/shopify/begin-install';
 
 export const MerchantLanding: React.FC = () => {
   const formRef = useRef<HTMLDivElement>(null);
