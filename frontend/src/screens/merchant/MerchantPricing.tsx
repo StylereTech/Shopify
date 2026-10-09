@@ -30,7 +30,7 @@ export const MerchantPricing: React.FC = () => {
       <header style={{ padding: '24px 32px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 36, height: 36, background: '#f59e0b', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 18 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 20 }}>Stowry</span>
+          <span style={{ fontWeight: 700, fontSize: 20 }}>Storree</span>
         </div>
         <button
           onClick={() => navigate('/merchant/login')}
@@ -123,7 +123,7 @@ export const MerchantPricing: React.FC = () => {
 
       {/* Footer */}
       <footer style={{ borderTop: '1px solid #27272a', padding: '24px 32px', textAlign: 'center', color: '#52525b', fontSize: 13 }}>
-        © 2026 Stowry. Last-mile delivery for retail. All rights reserved.
+        © 2026 Storree. Last-mile delivery for retail. All rights reserved.
       </footer>
     </div>
   );
