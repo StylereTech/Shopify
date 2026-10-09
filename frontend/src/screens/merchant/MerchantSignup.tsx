@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { merchantApi, type RegisterBody } from '../../api/merchantApi';
+import { merchantApi, type Plan, type RegisterBody } from '../../api/merchantApi';
 
 export const MerchantSignup: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const defaultPlan = searchParams.get('plan') === 'growth' ? 'growth' : 'access';
+  const requestedPlan = searchParams.get('plan');
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState(false);
 
   const [form, setForm] = useState<RegisterBody>({
     first_name: '',
@@ -15,8 +18,31 @@ export const MerchantSignup: React.FC = () => {
     store_name: '',
     city: '',
     state: '',
-    plan: defaultPlan,
+    plan: '',
   });
+
+  useEffect(() => {
+    let active = true;
+    merchantApi.plans()
+      .then(({ plans: availablePlans }) => {
+        if (!active) return;
+        const validPlans = (availablePlans || []).filter(
+          (plan) => plan.id && plan.name && Number.isFinite(plan.price_cents) && plan.price_cents >= 0
+        );
+        if (validPlans.length === 0) {
+          setPlansError(true);
+          return;
+        }
+        setPlans(validPlans);
+        setForm((current) => ({
+          ...current,
+          plan: validPlans.find((plan) => plan.id === requestedPlan)?.id ?? validPlans[0].id,
+        }));
+      })
+      .catch(() => { if (active) setPlansError(true); })
+      .finally(() => { if (active) setPlansLoading(false); });
+    return () => { active = false; };
+  }, [requestedPlan]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,19 +52,22 @@ export const MerchantSignup: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (plansLoading || plansError || !plans.some((plan) => plan.id === form.plan)) {
+      setError('Current plans are unavailable. Please try again later.');
+      return;
+    }
     setLoading(true);
     setError(null);
 
     try {
       const data = await merchantApi.register(form);
 
-      // Redirect to Stripe checkout
-      if (data.checkout_url) {
-        window.location.href = data.checkout_url;
+      if (!data.checkout_url) {
+        setError('The account request was received, but its payment link is unavailable. Sign in to check your account before trying again.');
+        setLoading(false);
         return;
       }
-
-      navigate('/merchant/login?registered=1');
+      window.location.href = data.checkout_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
       setLoading(false);
@@ -74,7 +103,7 @@ export const MerchantSignup: React.FC = () => {
           onClick={() => navigate('/merchant/pricing')}
         >
           <div style={{ width: 32, height: 32, background: '#f59e0b', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 16 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 18 }}>Stowry</span>
+          <span style={{ fontWeight: 700, fontSize: 18 }}>Storree</span>
         </div>
         <span style={{ color: '#52525b', fontSize: 14 }}>
           Already have an account?{' '}
@@ -136,15 +165,20 @@ export const MerchantSignup: React.FC = () => {
 
             <div style={{ marginBottom: 28 }}>
               <label style={labelStyle}>Plan</label>
-              <select name="plan" value={form.plan} onChange={handleChange} style={{ ...inputStyle, cursor: 'pointer' }}>
-                <option value="access">Stowry Access — $100/month</option>
-                <option value="growth">Stowry Growth — $200/month</option>
+              {plansLoading && <p role="status">Loading plans...</p>}
+              {plansError && <p role="alert">Current plans are unavailable. Please try again later.</p>}
+              <select name="plan" value={form.plan} onChange={handleChange} disabled={plansLoading || plansError} style={{ ...inputStyle, cursor: 'pointer' }}>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} — {plan.price_display || `$${(plan.price_cents / 100).toFixed(2)}`}/month
+                  </option>
+                ))}
               </select>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || plansLoading || plansError || !form.plan}
               style={{
                 width: '100%',
                 background: '#f59e0b',

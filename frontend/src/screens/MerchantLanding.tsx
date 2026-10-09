@@ -1,9 +1,9 @@
 import React, { useRef, useState } from 'react';
 import stylereLogoUrl from '../assets/stylere_logo.jpg';
-import heroBg from '../assets/hero.png';
+import heroBg from '../assets/hero-driver.jpg';
 
 // No token needed — begin-install is a public endpoint
-const BASE_URL = 'https://api-production-653e.up.railway.app/shopify/begin-install';
+const BASE_URL = '/shopify/begin-install';
 
 export const MerchantLanding: React.FC = () => {
   const formRef = useRef<HTMLDivElement>(null);
@@ -46,6 +46,7 @@ export const MerchantLanding: React.FC = () => {
 
   return (
     <div className="font-sans bg-[#FAF9F7] text-[#1C1917] min-h-screen overflow-x-hidden">
+      <main>
 
       {/* ── HERO ─────────────────────────────────────────────────── */}
       <section style={{ background: '#1C1917' }}>
@@ -235,6 +236,8 @@ export const MerchantLanding: React.FC = () => {
           </form>
         </div>
       </section>
+
+      </main>
 
       {/* ── FOOTER ────────────────────────────────────────────────── */}
       <footer className="bg-[#1C1917] px-6 py-10 text-center">

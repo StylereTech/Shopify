@@ -2,45 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { merchantApi, type Plan } from '../../api/merchantApi';
 
-// Fallback plans if API is unavailable
-const FALLBACK_PLANS: Plan[] = [
-  {
-    id: 'access',
-    name: 'Stowry Access',
-    price_cents: 10000,
-    price_display: '$100',
-    popular: false,
-    features: [
-      'Merchant dashboard',
-      'Order tracking',
-      'Order history',
-      'Basic reporting',
-      'Basic support',
-      'Manual order creation',
-    ],
-  },
-  {
-    id: 'growth',
-    name: 'Stowry Growth',
-    price_cents: 20000,
-    price_display: '$200',
-    popular: true,
-    features: [
-      'Everything in Access',
-      'Priority dispatch',
-      'Priority drivers',
-      'Advanced analytics',
-      'Multi-user staff accounts',
-      'Premium support',
-      'Preferred onboarding',
-    ],
-  },
-];
-
 export const MerchantPricing: React.FC = () => {
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<Plan[]>(FALLBACK_PLANS);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     merchantApi
@@ -48,10 +14,12 @@ export const MerchantPricing: React.FC = () => {
       .then((data) => {
         if (data.plans && data.plans.length > 0) {
           setPlans(data.plans);
+        } else {
+          setError(true);
         }
       })
       .catch(() => {
-        // Use fallback plans on error
+        setError(true);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -62,7 +30,7 @@ export const MerchantPricing: React.FC = () => {
       <header style={{ padding: '24px 32px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 36, height: 36, background: '#f59e0b', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 18 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 20 }}>Stowry</span>
+          <span style={{ fontWeight: 700, fontSize: 20 }}>Storree</span>
         </div>
         <button
           onClick={() => navigate('/merchant/login')}
@@ -86,6 +54,8 @@ export const MerchantPricing: React.FC = () => {
       <section style={{ display: 'flex', gap: 24, justifyContent: 'center', padding: '0 24px 80px', flexWrap: 'wrap' }}>
         {loading ? (
           <div style={{ color: '#71717a', padding: 40 }}>Loading plans...</div>
+        ) : error ? (
+          <p role="alert" style={{ color: '#fca5a5', padding: 40 }}>Current plans are unavailable. Please try again later.</p>
         ) : (
           plans.map((plan) => (
             <div
@@ -153,7 +123,7 @@ export const MerchantPricing: React.FC = () => {
 
       {/* Footer */}
       <footer style={{ borderTop: '1px solid #27272a', padding: '24px 32px', textAlign: 'center', color: '#52525b', fontSize: 13 }}>
-        © 2026 Stowry. Last-mile delivery for retail. All rights reserved.
+        © 2026 Storree. Last-mile delivery for retail. All rights reserved.
       </footer>
     </div>
   );

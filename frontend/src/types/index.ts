@@ -61,6 +61,7 @@ export interface Order {
   notes?: string;
   pricing: PricingQuote;
   paymentIntentId?: string;
+  paymentStatus?: 'unpaid' | 'paid' | 'failed';
   trackingUrl?: string;
   deliveryId?: string;
   createdAt: string;

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useMerchantAuth } from '../context/merchantAuthState';
 
-const API = import.meta.env.VITE_API_URL ?? (import.meta.env.VITE_SHOPIFY_API_URL || 'https://api-production-653e.up.railway.app');
+const API = import.meta.env.VITE_API_URL ?? '/shopify';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -275,7 +275,7 @@ export const MerchantDashboard: React.FC = () => {
       <header style={{ padding: '0 24px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 30, height: 30, background: '#f59e0b', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 15 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 16 }}>{merchant?.store_name || 'Stowry'}</span>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>{merchant?.store_name || 'Storree'}</span>
           {merchant?.plan_status && (
             <span style={{ background: STATUS_COLORS[merchant.plan_status] + '22', color: STATUS_COLORS[merchant.plan_status], border: `1px solid ${STATUS_COLORS[merchant.plan_status]}`, padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
               {merchant.plan === 'growth' ? 'Growth' : 'Access'} · {merchant.plan_status}
@@ -565,7 +565,7 @@ export const MerchantDashboard: React.FC = () => {
                   <div>
                     <p style={{ margin: '0 0 4px', color: '#a1a1aa', fontSize: 13 }}>Current Plan</p>
                     <p style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-                      Stowry {merchant?.plan === 'growth' ? 'Growth' : 'Access'}
+                      Storree {merchant?.plan === 'growth' ? 'Growth' : 'Access'}
                       {' '}
                       <span style={{ background: (STATUS_COLORS[merchant?.plan_status || ''] || '#6b7280') + '22', color: STATUS_COLORS[merchant?.plan_status || ''] || '#6b7280', padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
                         {merchant?.plan_status}

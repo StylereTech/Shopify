@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useMerchantAuth } from '../../context/MerchantAuthContext';
+import { useNavigate } from 'react-router-dom';
+import { useMerchantAuth } from '../../context/merchantAuthState';
 
 export const MerchantLogin: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const justRegistered = searchParams.get('registered') === '1';
   const { login } = useMerchantAuth();
 
   const [email, setEmail] = useState('');
@@ -48,7 +46,7 @@ export const MerchantLogin: React.FC = () => {
           onClick={() => navigate('/merchant/pricing')}
         >
           <div style={{ width: 32, height: 32, background: '#f59e0b', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 16 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 18 }}>Stowry</span>
+          <span style={{ fontWeight: 700, fontSize: 18 }}>Storree</span>
         </div>
         <span style={{ color: '#52525b', fontSize: 14 }}>
           No account?{' '}
@@ -60,12 +58,6 @@ export const MerchantLogin: React.FC = () => {
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
         <div style={{ width: '100%', maxWidth: 400 }}>
-          {justRegistered && (
-            <div style={{ background: '#052e16', border: '1px solid #14532d', borderRadius: 8, padding: '12px 16px', marginBottom: 20, color: '#86efac', fontSize: 14 }}>
-              Account created! Complete your payment to activate your plan, then sign in below.
-            </div>
-          )}
-
           <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px' }}>Welcome back</h1>
           <p style={{ color: '#71717a', marginBottom: 32 }}>Sign in to your merchant dashboard.</p>
 

@@ -1,7 +1,7 @@
 // ─── API Client ───────────────────────────────────────────────────────────────
-// Communicates with Shopify backend (/api/*) which proxies to api.stylere.app
+// The embedded app uses its own Vercel proxy so main-site /api routes stay separate.
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = import.meta.env.VITE_SHOPIFY_API_URL || '/shopify/api';
 const STYLERE_API = import.meta.env.VITE_STYLERE_API_URL || 'https://api.stylere.app';
 
 class ApiError extends Error {
@@ -41,7 +41,7 @@ async function request<T>(
   if (contentType?.includes('application/json')) {
     return res.json() as Promise<T>;
   }
-  return {} as T;
+  throw new ApiError(res.status, 'Expected a JSON API response');
 }
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
@@ -53,7 +53,6 @@ import type {
   ChatMessage,
   PaymentIntent,
   Store,
-  PricingQuote,
 } from '../types';
 
 export const api = {
@@ -105,18 +104,6 @@ export const api = {
       `${BASE_URL}/stores/nearby?lat=${lat}&lng=${lng}&radius=${radius ?? 10}`
     ),
 
-  // Pricing quote (from Style.re backend)
-  getQuote: (_draft: Partial<OrderDraft>): Promise<PricingQuote> => {
-    // Optimistic mock until backend wired — real call is POST to stylere API
-    return Promise.resolve({
-      subtotal: 0,
-      deliveryFee: 7.99,
-      serviceFee: 1.99,
-      tax: 0.80,
-      total: 10.78,
-      estimatedMinutes: 45,
-    });
-  },
 };
 
 // Direct Style.re backend calls (bypasses Shopify proxy)

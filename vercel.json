@@ -2,7 +2,14 @@
   "framework": "vite",
   "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist",
+  "redirects": [
+    { "source": "/", "destination": "/shopify/", "permanent": false }
+  ],
   "rewrites": [
+    { "source": "/shopify/api/:path*", "destination": "https://api-production-653e.up.railway.app/api/:path*" },
+    { "source": "/shopify/begin-install", "destination": "https://api-production-653e.up.railway.app/shopify/begin-install" },
+    { "source": "/shopify/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/shopify/favicon.png", "destination": "/favicon.png" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

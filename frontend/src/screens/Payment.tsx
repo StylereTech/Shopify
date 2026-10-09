@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import {
@@ -12,10 +12,8 @@ import { api } from '../api/client';
 import { AppShell } from '../components/layout/AppShell';
 import { Button, Card } from '../components/ui';
 
-const STRIPE_PK = import.meta.env.VITE_STRIPE_PK ||
-  'pk_live_51SwwWxLFvcRfmHtcOesMNMFvFnVxLEpJUilnAdJwlkVxnONQMb28yGVCpxnUgPJHNKK6Ql1pDwFBYdWKdFcCm3G00CjCqsimr';
-
-const stripePromise = loadStripe(STRIPE_PK);
+const STRIPE_PK = import.meta.env.VITE_STRIPE_PK;
+const stripePromise = STRIPE_PK ? loadStripe(STRIPE_PK) : Promise.resolve(null);
 
 const CARD_ELEMENT_OPTIONS = {
   style: {
@@ -41,7 +39,8 @@ const PaymentForm: React.FC = () => {
   const stripe = useStripe();
   const elements = useElements();
   const navigate = useNavigate();
-  const { draft, currentOrder, setOrderId, setPaymentIntentId, setCurrentOrder } = useOrderStore();
+  const { draft, setPaymentIntentId, setCurrentOrder } = useOrderStore();
+  const initializationStarted = useRef(false);
 
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setLocalPaymentIntentId] = useState<string>('');
@@ -49,40 +48,45 @@ const PaymentForm: React.FC = () => {
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [requiresReconciliation, setRequiresReconciliation] = useState(false);
 
-  const total = draft.pricing?.total ?? 10.78;
+  const [total, setTotal] = useState<number | null>(null);
   const formatMoney = (v: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
 
   useEffect(() => {
+    if (initializationStarted.current) return;
+    initializationStarted.current = true;
     const initialize = async () => {
       try {
-        let orderId = draft.orderId;
-        if (!orderId) {
-          const order = await api.createOrder(draft);
-          orderId = order.id;
-          setOrderId(orderId);
-          setCurrentOrder(order);
+        if (!STRIPE_PK) throw new Error('Stripe configuration is missing');
+        if (!draft.orderId) throw new Error('A server-priced order is required');
+        const order = await api.getOrder(draft.orderId);
+        if (order.id !== draft.orderId || order.paymentStatus !== 'unpaid' || !Number.isFinite(order.pricing?.total) || order.pricing.total <= 0) {
+          throw new Error('Order price or status is not valid');
         }
-
-        const pi = await api.createPaymentIntent(orderId, total);
+        setCurrentOrder(order);
+        setTotal(order.pricing.total);
+        const pi = await api.createPaymentIntent(order.id, order.pricing.total);
+        if (!pi.clientSecret || !pi.paymentIntentId || pi.paymentIntentId.startsWith('pi_mock_') || pi.amount !== order.pricing.total) {
+          throw new Error('A verified payment intent is unavailable');
+        }
         setClientSecret(pi.clientSecret);
         setLocalPaymentIntentId(pi.paymentIntentId);
         setPaymentIntentId(pi.paymentIntentId);
-      } catch (err) {
-        console.error('Payment init failed:', err);
-        setError('Failed to initialize payment. Please try again.');
+      } catch {
+        setError('Secure payment is unavailable. Your card has not been charged.');
       } finally {
         setLoading(false);
       }
     };
 
     initialize();
-  }, []);
+  }, [draft.orderId, setCurrentOrder, setPaymentIntentId]);
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!stripe || !elements || !clientSecret) return;
+    if (!stripe || !elements || !clientSecret || !draft.orderId || total === null) return;
 
     setPaying(true);
     setError(null);
@@ -103,15 +107,19 @@ const PaymentForm: React.FC = () => {
       }
 
       if (paymentIntent?.status === 'succeeded') {
-        const confirmResult = await api.confirmPayment(paymentIntentId, draft.orderId!);
-        if ('trackingUrl' in confirmResult && confirmResult.trackingUrl && currentOrder) {
-          setCurrentOrder({ ...currentOrder, trackingUrl: confirmResult.trackingUrl as string });
+        setRequiresReconciliation(true);
+        const confirmResult = await api.confirmPayment(paymentIntentId, draft.orderId);
+        if (confirmResult.success !== true || confirmResult.orderId !== draft.orderId) {
+          throw new Error('Order confirmation is pending');
         }
+        setRequiresReconciliation(false);
         setSuccess(true);
         setTimeout(() => navigate('/confirmation'), 1000);
+      } else {
+        setError('Payment has not been confirmed. Please check its status before retrying.');
       }
-    } catch (err) {
-      setError('Payment failed. Please try again.');
+    } catch {
+      setError('Payment status could not be verified. Please check your order before retrying.');
       setPaying(false);
     }
   };
@@ -135,7 +143,7 @@ const PaymentForm: React.FC = () => {
         </div>
         <div className="text-center">
           <p className="text-xl font-bold text-[#1C1917] mb-1">Payment confirmed</p>
-          <p className="text-[14px] text-[#78716C]">Dispatching your courier…</p>
+          <p className="text-[14px] text-[#78716C]">Checking your order status…</p>
         </div>
       </div>
     );
@@ -148,7 +156,7 @@ const PaymentForm: React.FC = () => {
       <div className="bg-[#1C1917] rounded-3xl p-5 flex items-center justify-between">
         <div>
           <p className="text-white/50 text-[12px] uppercase tracking-wider mb-1">Total</p>
-          <p className="text-3xl font-bold text-white tracking-tight">{formatMoney(total)}</p>
+          <p className="text-3xl font-bold text-white tracking-tight">{total === null ? 'Unavailable' : formatMoney(total)}</p>
         </div>
         <div className="text-right">
           <p className="text-white/50 text-[12px]">Same-hour delivery</p>
@@ -188,14 +196,20 @@ const PaymentForm: React.FC = () => {
         </div>
       )}
 
+      {requiresReconciliation && draft.orderId && (
+        <Button type="button" variant="secondary" fullWidth onClick={() => navigate(`/tracking/${draft.orderId}`)}>
+          Check order status
+        </Button>
+      )}
+
       <Button
         type="submit"
         size="lg"
         fullWidth
         loading={paying}
-        disabled={!stripe || !clientSecret}
+        disabled={!stripe || !clientSecret || total === null || requiresReconciliation}
       >
-        {paying ? 'Processing…' : `Pay ${formatMoney(total)}`}
+        {paying ? 'Processing…' : requiresReconciliation ? 'Check payment status' : total === null ? 'Payment unavailable' : `Pay ${formatMoney(total)}`}
       </Button>
 
       <p className="text-center text-[11px] text-[#C4BFB9]">
