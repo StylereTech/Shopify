@@ -3,6 +3,8 @@
   "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist",
   "rewrites": [
+    { "source": "/shopify/assets/:path*", "destination": "/assets/:path*" },
+    { "source": "/shopify/favicon.png", "destination": "/favicon.png" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
