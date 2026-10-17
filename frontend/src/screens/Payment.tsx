@@ -1,231 +1,144 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { loadStripe } from '@stripe/stripe-js';
-import {
-  Elements,
-  CardElement,
-  useStripe,
-  useElements,
-} from '@stripe/react-stripe-js';
-import { useOrderStore } from '../store/orderStore';
-import { api } from '../api/client';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import { loadStripe, type StripeExpressCheckoutElementConfirmEvent } from '@stripe/stripe-js';
 import { AppShell } from '../components/layout/AppShell';
-import { Button, Card } from '../components/ui';
+import { MissingOrder, OrderPrice, ReadError, SessionNotice } from '../components/customer/CustomerUI';
+import { useCustomerSession } from '../context/useCustomerSession';
+import { useCustomerAction } from '../hooks/useCustomerAction';
+import { useOrderStore } from '../store/orderStore';
+import { customerApi } from '../api/client';
+import { CustomerRequestError } from '../api/customerSession';
+import { customerRecordUnavailable, customerErrorMessage, money, orderPath, readOrderLocation, terminalOrder, trackingPath } from '../lib/customerPageState';
+import { paymentIntentForOrder, verifiedStripeResult, waitForPaymentSdk } from '../lib/customerPaymentState';
+import type { Order, PaymentIntent } from '../types';
 
-const STRIPE_PK = import.meta.env.VITE_STRIPE_PK;
-const stripePromise = STRIPE_PK ? loadStripe(STRIPE_PK) : Promise.resolve(null);
+const stripeKey = import.meta.env.VITE_STRIPE_PK;
+const stripePromise = typeof stripeKey === 'string' && /^pk_(test|live)_/.test(stripeKey) ? loadStripe(stripeKey) : null;
 
-const CARD_ELEMENT_OPTIONS = {
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#1C1917',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif',
-      '::placeholder': { color: '#C4BFB9' },
-      iconColor: '#E8621A',
-    },
-    invalid: { color: '#EF4444', iconColor: '#EF4444' },
-  },
-};
-
-const LockIcon = () => (
-  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-    <path d="M7 11V7a5 5 0 0110 0v4" />
-  </svg>
-);
-
-const PaymentForm: React.FC = () => {
+export function Payment() {
+  const session = useCustomerSession();
+  const { search } = useLocation();
+  const { draft } = useOrderStore();
+  const orderId = readOrderLocation(search, draft.orderId);
+  const navigate = useNavigate();
+  // Stripe may append a client secret on return. It is never trusted as order
+  // evidence or persisted; the server retrieves the intent for this owned order.
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (orderId && (params.has('payment_intent_client_secret') || params.has('payment_intent') || params.has('redirect_status'))) navigate(orderPath('payment', orderId), { replace: true });
+  }, [search, orderId, navigate]);
+  return <AppShell title="Payment" showBack backTo={orderId ? orderPath('summary', orderId) : '/orders'} showNav={false} step={3}><SessionNotice session={session} />{!orderId ? <MissingOrder /> : session.status === 'ready' && <PaymentOrder key={session.key + ':' + orderId} session={session} orderId={orderId} />}</AppShell>;
+}
+function PaymentOrder({ session, orderId }: { session: ReturnType<typeof useCustomerSession>; orderId: string }) {
+  const query = useQuery({ queryKey: ['customer-order', session.key, orderId], queryFn: ({ signal }) => customerApi(session).getOrder(orderId, signal), retry: false, refetchOnMount: 'always', staleTime: 0 });
+  const order = query.isFetchedAfterMount && !customerRecordUnavailable(query.error) ? query.data : undefined;
+  return <div className="customer-stack">
+    {!query.isFetchedAfterMount && !query.isError && <p role="status">Verifying the order before payment…</p>}
+    {query.isError && <ReadError session={session} error={query.error} retry={() => query.refetch()} />}
+    {order && <><OrderPrice order={order} />
+      {order.paymentStatus === 'paid' ? <div className="customer-notice" data-tone="info"><p>Payment is already confirmed for this order.</p><Link className="customer-button" to={orderPath('confirmation', order.id)}>View confirmation</Link></div>
+        : terminalOrder(order.status) ? <div className="customer-notice"><p>This order cannot accept another payment.</p><Link to={trackingPath(order.id)}>View order updates</Link></div>
+        : !query.isError && <PaymentSetup key={order.id + ':' + order.amountCents} session={session} order={order} />}
+    </>}
+  </div>;
+}
+function PaymentSetup({ session, order }: { session: ReturnType<typeof useCustomerSession>; order: Order }) {
+  const navigate = useNavigate();
+  const action = useCustomerAction(session);
+  const [intent, setIntent] = useState<PaymentIntent | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [pending, setPending] = useState(false);
+  const load = async () => {
+    const scope = action.begin();
+    if (!scope) return;
+    setError(null); setIntent(null); setPending(false);
+    try {
+      const api = customerApi(session);
+      const freshOrder = await api.getOrder(order.id, scope.signal);
+      if (!scope.current()) return;
+      if (freshOrder.paymentStatus === 'paid') { navigate(orderPath('confirmation', order.id), { replace: true }); return; }
+      if (terminalOrder(freshOrder.status)) throw new CustomerRequestError('This order cannot accept another payment. View its updates for more information.', 409);
+      if (freshOrder.amountCents !== order.amountCents || freshOrder.currency !== order.currency) throw new CustomerRequestError('The saved price changed. Return to the order review before continuing.', 409);
+      const savedIntent = paymentIntentForOrder(await api.createPaymentIntent(order.id, scope.signal), freshOrder);
+      if (!scope.current()) return;
+      const store = useOrderStore.getState();
+      if (store.draft.orderId === order.id) store.setPaymentIntentId(savedIntent.paymentIntentId, order.id, store.revision);
+      if (savedIntent.status === 'succeeded') {
+        await api.confirmPayment(savedIntent.paymentIntentId, order.id, scope.signal);
+        if (scope.current()) navigate(orderPath('confirmation', order.id), { replace: true });
+      } else if (['processing', 'requires_capture'].includes(savedIntent.status)) setPending(true);
+      else if (savedIntent.status === 'canceled') throw new CustomerRequestError('This payment was cancelled. Contact support before starting another payment for this order.', 409);
+      else setIntent(savedIntent);
+    } catch (caught) { if (scope.current()) setError(caught); }
+    finally { scope.finish(); }
+  };
+  if (!stripePromise) return <div className="customer-notice" data-tone="error"><h2>Online payment is unavailable</h2><p>Payment options have not been configured for this website. Your order remains unpaid.</p><Link to="/support">Contact support</Link></div>;
+  return <section className="customer-card"><h2>Secure payment</h2>
+    <p className="customer-muted">Available methods depend on this device, Stripe settings, and your order. Payment does not guarantee courier availability.</p>
+    {error != null && <ReadError error={error} session={session} retry={load} />}
+    {pending && <p className="customer-notice" data-tone="info" role="status">Your payment is still processing. Check its saved status before trying another method.</p>}
+    {!intent && !(error instanceof CustomerRequestError && error.code === 'PAYMENT_RECONCILIATION_REQUIRED') && <button className="customer-button" type="button" disabled={action.busy} onClick={() => void load()}>{action.busy ? 'Checking payment…' : pending ? 'Check payment status' : 'Check payment and load methods'}</button>}
+    {intent && <Elements key={intent.paymentIntentId} stripe={stripePromise} options={{ clientSecret: intent.clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#b64017', colorText: '#18212b', colorBackground: '#ffffff', colorDanger: '#a33221', fontSizeBase: '16px', borderRadius: '10px' } } }}>
+      <PaymentForm session={session} order={order} intent={intent} action={action} recheck={load} />
+    </Elements>}
+  </section>;
+}
+function PaymentForm({ session, order, intent, action, recheck }: { session: ReturnType<typeof useCustomerSession>; order: Order; intent: PaymentIntent; action: ReturnType<typeof useCustomerAction>; recheck: () => Promise<void> }) {
   const stripe = useStripe();
   const elements = useElements();
   const navigate = useNavigate();
-  const { draft, setPaymentIntentId, setCurrentOrder } = useOrderStore();
-  const initializationStarted = useRef(false);
-
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
-  const [paymentIntentId, setLocalPaymentIntentId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [paying, setPaying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [requiresReconciliation, setRequiresReconciliation] = useState(false);
-
-  const [total, setTotal] = useState<number | null>(null);
-  const formatMoney = (v: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
-
-  useEffect(() => {
-    if (initializationStarted.current) return;
-    initializationStarted.current = true;
-    const initialize = async () => {
-      try {
-        if (!STRIPE_PK) throw new Error('Stripe configuration is missing');
-        if (!draft.orderId) throw new Error('A server-priced order is required');
-        const order = await api.getOrder(draft.orderId);
-        if (order.id !== draft.orderId || order.paymentStatus !== 'unpaid' || !Number.isFinite(order.pricing?.total) || order.pricing.total <= 0) {
-          throw new Error('Order price or status is not valid');
-        }
-        setCurrentOrder(order);
-        setTotal(order.pricing.total);
-        const pi = await api.createPaymentIntent(order.id, order.pricing.total);
-        if (!pi.clientSecret || !pi.paymentIntentId || pi.paymentIntentId.startsWith('pi_mock_') || pi.amount !== order.pricing.total) {
-          throw new Error('A verified payment intent is unavailable');
-        }
-        setClientSecret(pi.clientSecret);
-        setLocalPaymentIntentId(pi.paymentIntentId);
-        setPaymentIntentId(pi.paymentIntentId);
-      } catch {
-        setError('Secure payment is unavailable. Your card has not been charged.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initialize();
-  }, [draft.orderId, setCurrentOrder, setPaymentIntentId]);
-
-  const handlePay = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!stripe || !elements || !clientSecret || !draft.orderId || total === null) return;
-
-    setPaying(true);
-    setError(null);
-
+  const [complete, setComplete] = useState(false);
+  const [wallets, setWallets] = useState<boolean | null>(null);
+  const [elementError, setElementError] = useState(false);
+  const [message, setMessage] = useState('');
+  const [reconcile, setReconcile] = useState(false);
+  const confirm = async (wallet?: StripeExpressCheckoutElementConfirmEvent) => {
+    if (!stripe || !elements || reconcile) { wallet?.paymentFailed({ reason: 'fail' }); return; }
+    const scope = action.begin();
+    if (!scope) { wallet?.paymentFailed({ reason: 'fail' }); return; }
+    setMessage('');
+    let attempted = false;
     try {
-      const card = elements.getElement(CardElement);
-      if (!card) throw new Error('Card element not found');
-
-      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(
-        clientSecret,
-        { payment_method: { card } }
-      );
-
-      if (stripeError) {
-        setError(stripeError.message ?? 'Payment failed');
-        setPaying(false);
-        return;
+      if (intent.status !== 'requires_action') {
+        const validation = await waitForPaymentSdk(elements.submit(), scope.signal);
+        if (!scope.current()) return;
+        if (validation.error) { setMessage(validation.error.message || 'Check the payment details.'); wallet?.paymentFailed({ reason: 'invalid_payment_data' }); return; }
       }
-
-      if (paymentIntent?.status === 'succeeded') {
-        setRequiresReconciliation(true);
-        const confirmResult = await api.confirmPayment(paymentIntentId, draft.orderId);
-        if (confirmResult.success !== true || confirmResult.orderId !== draft.orderId) {
-          throw new Error('Order confirmation is pending');
-        }
-        setRequiresReconciliation(false);
-        setSuccess(true);
-        setTimeout(() => navigate('/confirmation'), 1000);
-      } else {
-        setError('Payment has not been confirmed. Please check its status before retrying.');
+      if (!scope.current()) return;
+      attempted = true;
+      const operation = intent.status === 'requires_action'
+        ? stripe.handleNextAction({ clientSecret: intent.clientSecret })
+        : stripe.confirmPayment({ elements, clientSecret: intent.clientSecret, confirmParams: { return_url: window.location.origin + '/shopify' + orderPath('payment', order.id) }, redirect: 'if_required' });
+      const result = await waitForPaymentSdk(operation, scope.signal);
+      if (!scope.current()) return;
+      if (result.error) {
+        const definite = result.error.type === 'card_error' || result.error.type === 'validation_error';
+        setReconcile(!definite); setMessage(definite ? result.error.message || 'Payment was not accepted. Check your payment details.' : 'The payment result is not confirmed. Check its saved status before trying again.');
+        wallet?.paymentFailed({ reason: 'fail' }); return;
       }
-    } catch {
-      setError('Payment status could not be verified. Please check your order before retrying.');
-      setPaying(false);
-    }
+      const status = verifiedStripeResult(result.paymentIntent, intent);
+      if (status !== 'succeeded') { setReconcile(true); setMessage('Payment is not yet confirmed. Check the saved payment status before trying again.'); return; }
+      await customerApi(session).confirmPayment(intent.paymentIntentId, order.id, scope.signal);
+      if (scope.current()) navigate(orderPath('confirmation', order.id), { replace: true });
+    } catch (caught) {
+      if (scope.current()) { setReconcile(attempted); setMessage(customerErrorMessage(caught)); wallet?.paymentFailed({ reason: 'fail' }); }
+    } finally { scope.finish(); }
   };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="w-10 h-10 border-2 border-[#E8621A] border-t-transparent rounded-full animate-spin" />
-        <p className="text-[14px] text-[#78716C]">Preparing secure payment…</p>
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); void confirm(); };
+  return <form className="customer-stack" onSubmit={submit}>
+    {message && <p className="customer-notice" data-tone={reconcile ? 'info' : 'error'} role="alert">{message}</p>}
+    {reconcile ? <button className="customer-button" type="button" disabled={action.busy} onClick={() => void recheck()}>Check payment status</button> : intent.status === 'requires_action' ? <button className="customer-button" type="button" disabled={!stripe || action.busy} onClick={() => void confirm()}>{action.busy ? 'Verifying payment…' : 'Continue payment verification'}</button> : <>
+      <div className="customer-wallet" hidden={wallets === false} aria-label="Available express payment methods" style={action.busy ? { pointerEvents: 'none', opacity: 0.6 } : undefined}>
+        <ExpressCheckoutElement options={{ layout: { maxColumns: 2, maxRows: 2 } }} onReady={event => setWallets(!!event.availablePaymentMethods && Object.values(event.availablePaymentMethods).some(Boolean))} onLoadError={() => setWallets(false)} onClick={event => { if (action.busy || !session.current()) event.reject(); else event.resolve(); }} onConfirm={event => void confirm(event)} />
       </div>
-    );
-  }
-
-  if (success) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-5">
-        <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center shadow-[0_4px_20px_rgba(34,197,94,0.15)]">
-          <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="#22C55E" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <div className="text-center">
-          <p className="text-xl font-bold text-[#1C1917] mb-1">Payment confirmed</p>
-          <p className="text-[14px] text-[#78716C]">Checking your order status…</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={handlePay} className="px-5 py-6 flex flex-col gap-5">
-
-      {/* Order total */}
-      <div className="bg-[#1C1917] rounded-3xl p-5 flex items-center justify-between">
-        <div>
-          <p className="text-white/50 text-[12px] uppercase tracking-wider mb-1">Total</p>
-          <p className="text-3xl font-bold text-white tracking-tight">{total === null ? 'Unavailable' : formatMoney(total)}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-white/50 text-[12px]">Same-hour delivery</p>
-          <p className="text-white/70 text-[13px] font-medium mt-0.5">Style.re</p>
-        </div>
-      </div>
-
-      {/* Card Input */}
-      <Card>
-        <h2 className="font-bold text-[#1C1917] text-[15px] mb-4">Card Details</h2>
-        <div className="border border-[#EEEBE8] rounded-2xl p-4 focus-within:border-[#E8621A] focus-within:ring-2 focus-within:ring-[#E8621A]/10 transition-all">
-          <CardElement options={CARD_ELEMENT_OPTIONS} />
-        </div>
-        <div className="mt-3 flex items-center gap-2 text-[12px] text-[#A8A29E]">
-          <LockIcon />
-          <span>256-bit encryption · Powered by Stripe</span>
-        </div>
-      </Card>
-
-      {/* Trust badges */}
-      <div className="flex items-center justify-center gap-6">
-        {['Visa', 'Mastercard', 'Amex', 'Discover'].map(b => (
-          <span key={b} className="text-[11px] font-semibold text-[#C4BFB9] uppercase tracking-wide">{b}</span>
-        ))}
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-2xl p-4">
-          <svg className="flex-shrink-0 mt-0.5" width="16" height="16" fill="none" viewBox="0 0 24 24"
-            stroke="#EF4444" strokeWidth={2}>
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-          <p className="text-[13px] text-red-600">{error}</p>
-        </div>
-      )}
-
-      {requiresReconciliation && draft.orderId && (
-        <Button type="button" variant="secondary" fullWidth onClick={() => navigate(`/tracking/${draft.orderId}`)}>
-          Check order status
-        </Button>
-      )}
-
-      <Button
-        type="submit"
-        size="lg"
-        fullWidth
-        loading={paying}
-        disabled={!stripe || !clientSecret || total === null || requiresReconciliation}
-      >
-        {paying ? 'Processing…' : requiresReconciliation ? 'Check payment status' : total === null ? 'Payment unavailable' : `Pay ${formatMoney(total)}`}
-      </Button>
-
-      <p className="text-center text-[11px] text-[#C4BFB9]">
-        By paying, you agree to Style.re's{' '}
-        <span className="text-[#78716C] underline underline-offset-2 cursor-pointer">Terms of Service</span>
-      </p>
-    </form>
-  );
-};
-
-export const Payment: React.FC = () => {
-  return (
-    <AppShell title="Secure Payment" showBack showNav={false} step={3} totalSteps={4}>
-      <Elements stripe={stripePromise}>
-        <PaymentForm />
-      </Elements>
-    </AppShell>
-  );
-};
+      {wallets === true && <p className="customer-separator">Or choose another method</p>}
+      <PaymentElement options={{ layout: 'accordion' }} onChange={event => setComplete(event.complete)} onLoadError={() => setElementError(true)} onReady={() => setElementError(false)} />
+      {elementError && <p className="customer-notice" data-tone="error" role="alert">Payment methods could not load. Refresh payment status to try again.</p>}
+      <button className="customer-button" type="submit" disabled={!stripe || !elements || !complete || action.busy || elementError}>{action.busy ? 'Verifying payment…' : 'Pay ' + money(intent.amountCents / 100)}</button>
+    </>}
+    {!action.busy && !reconcile && <button className="customer-link-button" type="button" onClick={() => void recheck()}>Refresh payment status</button>}
+    <p className="customer-muted">By continuing, you agree to the <Link to="/terms">Terms of Service</Link>. Payment information is collected by Stripe.</p>
+  </form>;
+}

@@ -101,11 +101,23 @@ export class DoorDashDriveClient {
     return generateDoorDashJWT(this.config.developerId, this.config.keyId, this.config.signingSecret);
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  private async fetchWithTimeout<T>(url: string, init: RequestInit, consume: (response: Response) => Promise<T>): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new DoorDashError('DoorDash response timed out', true, 408));
+      }, this.timeoutMs);
+    });
     try {
-      return await fetch(url, { ...init, signal: controller.signal });
+      return await Promise.race([timeout, (async () => {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+        if (controller.signal.aborted) throw new DoorDashError('DoorDash response timed out', true, 408);
+        const result = await consume(response);
+        if (controller.signal.aborted) throw new DoorDashError('DoorDash response timed out', true, 408);
+        return result;
+      })()]);
     } finally {
       clearTimeout(timer);
     }
@@ -146,15 +158,13 @@ export class DoorDashDriveClient {
   }
 
   async createDelivery(payload: Record<string, unknown>): Promise<DoorDashDelivery> {
-    const res = await this.fetchWithTimeout(
+    return this.fetchWithTimeout(
       `${this.baseUrl}/drive/v2/deliveries`,
       {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(payload),
-      }
-    );
-
+      }, async res => {
     const body = await res.json().catch(() => ({})) as DoorDashDelivery & { message?: string };
 
     if (!res.ok) {
@@ -167,18 +177,22 @@ export class DoorDashDriveClient {
     }
 
     return body;
+      }
+    );
   }
 
   async getDelivery(externalId: string): Promise<DoorDashDelivery> {
-    const res = await this.fetchWithTimeout(
+    return this.fetchWithTimeout(
       `${this.baseUrl}/drive/v2/deliveries/${externalId}`,
       {
         method: 'GET',
         headers: this.headers(),
+      }, async res => {
+    const body = await res.json().catch(() => ({})) as DoorDashDelivery;
+    if (!res.ok) throw new DoorDashError(`DoorDash status request failed (${res.status})`, res.status >= 500 || res.status === 429, res.status);
+    return body;
       }
     );
-    const body = await res.json().catch(() => ({})) as DoorDashDelivery;
-    return body;
   }
 
   async cancelDelivery(externalId: string): Promise<void> {
@@ -188,6 +202,9 @@ export class DoorDashDriveClient {
         method: 'PUT',
         headers: this.headers(),
         body: JSON.stringify({}),
+      }, async res => {
+        if (!res.ok) throw new DoorDashError(`DoorDash cancellation failed (${res.status})`, res.status >= 500 || res.status === 429, res.status);
+        await res.arrayBuffer();
       }
     );
   }

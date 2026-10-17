@@ -13,7 +13,8 @@ import {
   PostgresWebhookEventRepository,
   PostgresStorreeOrderRepository
 } from './infrastructure/persistence/postgres-repositories.js';
-import { setStorreeOrderRepository } from './api/orders.js';
+import { setStorreeOrderRepository, setCustomerCheckoutRepository } from './api/orders.js';
+import { PostgresCustomerCheckoutRepository } from './infrastructure/persistence/customer-checkout.js';
 import { RedisDispatchQueue } from './infrastructure/queue/dispatch-queue.js';
 import { ConsoleLogger } from './observability/logger.js';
 import { MetricsRegistry } from './observability/metrics.js';
@@ -26,6 +27,7 @@ const redis = new Redis(env.REDIS_URL);
 
 // Wire Postgres order repository for customer-facing direct-link flow
 setStorreeOrderRepository(new PostgresStorreeOrderRepository(pool));
+setCustomerCheckoutRepository(new PostgresCustomerCheckoutRepository(pool));
 const logger = new ConsoleLogger();
 const metrics = new MetricsRegistry();
 

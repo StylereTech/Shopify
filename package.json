@@ -8,9 +8,11 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "test": "vitest run",
-    "test:frontend:callbacks": "node --test --test-concurrency=1 tests/merchant-dashboard.test.mjs frontend/tests/merchant-pages.test.mjs",
+    "test:frontend:callbacks": "node --test --test-concurrency=1 tests/merchant-dashboard.test.mjs frontend/tests/merchant-pages.test.mjs frontend/tests/customer-pages.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "migrate": "tsx src/infrastructure/db/migrate.ts",
+    "customer:retention": "tsx src/operations/customer-retention-cli.ts",
+    "customer:dispatch-recovery": "tsx src/operations/customer-dispatch-recovery-cli.ts",
     "worker": "tsx src/worker.ts"
   },
   "dependencies": {

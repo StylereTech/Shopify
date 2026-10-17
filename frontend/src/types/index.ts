@@ -51,6 +51,10 @@ export interface PricingQuote {
 }
 
 export interface Order {
+  guestId: string;
+  requestId: string;
+  amountCents: number;
+  currency: 'usd';
   id: string;
   serviceType: ServiceType;
   status: OrderStatus;
@@ -70,8 +74,13 @@ export interface Order {
 }
 
 export interface TrackingStatus {
+  guestId: string;
   orderId: string;
   status: OrderStatus;
+  availability: 'recorded' | 'live' | 'unavailable';
+  paymentStatus: 'unpaid' | 'paid' | 'failed';
+  dispatchStatus: string;
+  providerTrackingUrl?: string;
   driverName?: string;
   driverPhone?: string;
   currentLocation?: { lat: number; lng: number };
@@ -95,9 +104,34 @@ export interface ChatMessage {
 }
 
 export interface PaymentIntent {
+  guestId: string;
+  orderId: string;
   clientSecret: string;
   paymentIntentId: string;
-  amount: number;
+  amountCents: number;
+  currency: 'usd';
+  status: string;
+}
+
+export interface CustomerOrderPage {
+  guestId: string;
+  orders: Order[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}
+export interface CustomerChat {
+  guestId: string;
+  orderId: string;
+  available: boolean;
+  messages: ChatMessage[];
+}
+export interface CustomerPaymentReceipt {
+  success: true;
+  guestId: string;
+  orderId: string;
+  paymentIntentId: string;
+  paymentStatus: 'paid';
+  dispatched: boolean;
+  trackingUrl?: string;
 }
 
 // ─── App Flow State ───────────────────────────────────────────────────────────
