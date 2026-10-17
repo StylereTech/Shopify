@@ -1,262 +1,57 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useOrderStore } from '../store/orderStore';
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
-import { Button, Input, Textarea, Card } from '../components/ui';
+import { SessionNotice } from '../components/customer/CustomerUI';
+import { Input, Textarea } from '../components/ui';
+import { useCustomerSession } from '../context/useCustomerSession';
+import { useOrderStore } from '../store/orderStore';
+import { customerDraftPayload } from '../lib/customerContracts';
+import { customerErrorMessage, orderPath } from '../lib/customerPageState';
 import type { Address } from '../types';
 
-interface FormErrors {
-  pickupStreet?: string;
-  pickupCity?: string;
-  pickupState?: string;
-  pickupZip?: string;
-  dropoffStreet?: string;
-  dropoffCity?: string;
-  dropoffState?: string;
-  dropoffZip?: string;
-  name?: string;
-  phone?: string;
-  email?: string;
+export function AddressForm() {
+  const session = useCustomerSession();
+  return <AppShell title="Delivery details" showBack backTo="/order" showNav={false} step={1}><SessionNotice session={session} />{session.status === 'ready' && <DeliveryForm key={session.key} current={session.current} />}</AppShell>;
 }
-
-const PinIcon = ({ color = 'white' }: { color?: string }) => (
-  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke={color} strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round"
-      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-    <circle cx="12" cy="11" r="3" />
-  </svg>
-);
-
-export const AddressForm: React.FC = () => {
+function DeliveryForm({ current }: { current: () => boolean }) {
   const navigate = useNavigate();
-  const {
-    draft,
-    setPickupAddress,
-    setDropoffAddress,
-    setContact,
-    setNotes,
-  } = useOrderStore();
-
-  const [errors, setErrors] = useState<FormErrors>({});
-
-  const pickup = draft.pickupAddress ?? {};
-  const dropoff = draft.dropoffAddress ?? {};
-  const contact = draft.contact ?? {};
-
-  const validate = (): boolean => {
-    const newErrors: FormErrors = {};
-
-    if (!pickup.street) newErrors.pickupStreet = 'Street address required';
-    if (!pickup.city) newErrors.pickupCity = 'City required';
-    if (!pickup.state) newErrors.pickupState = 'State required';
-    if (!pickup.zip) newErrors.pickupZip = 'ZIP code required';
-
-    if (!dropoff.street) newErrors.dropoffStreet = 'Street address required';
-    if (!dropoff.city) newErrors.dropoffCity = 'City required';
-    if (!dropoff.state) newErrors.dropoffState = 'State required';
-    if (!dropoff.zip) newErrors.dropoffZip = 'ZIP code required';
-
-    if (!contact.name) newErrors.name = 'Name required';
-    if (!contact.phone) newErrors.phone = 'Phone required';
-    if (!contact.email) newErrors.email = 'Email required';
-    else if (!/\S+@\S+\.\S+/.test(contact.email)) newErrors.email = 'Invalid email';
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleNext = () => {
-    if (validate()) {
+  const { draft, checkoutRequest, setServiceType, setPickupAddress, setDropoffAddress, setContact, setItems, setNotes } = useOrderStore();
+  const [error, setError] = useState('');
+  if (checkoutRequest) return <div className="customer-notice" data-tone="info"><p>Recover your saved request before editing its details.</p><Link className="customer-button" to="/summary">Recover request</Link></div>;
+  if (draft.orderId) return <div className="customer-notice"><p>These details belong to a saved order. Review it or start a new delivery from the customer home.</p><Link className="customer-button" to={orderPath('summary', draft.orderId)}>Review saved order</Link><Link to="/order">Customer home</Link></div>;
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!current() || useOrderStore.getState().checkoutRequest) return;
+    try {
+      const payload = customerDraftPayload({ ...draft, serviceType: draft.serviceType ?? 'item_delivery', pickupAddress: { ...draft.pickupAddress, country: 'US', unit: draft.pickupAddress?.unit?.trim() || undefined }, dropoffAddress: { ...draft.dropoffAddress, country: 'US', unit: draft.dropoffAddress?.unit?.trim() || undefined } });
+      setServiceType(payload.serviceType!); setPickupAddress(payload.pickupAddress!); setDropoffAddress(payload.dropoffAddress!); setContact(payload.contact!);
+      setItems(payload.items ?? []); setNotes(payload.notes ?? '');
       navigate('/summary');
-    }
+    } catch (caught) { setError(customerErrorMessage(caught)); }
   };
-
-  const updatePickup = (field: keyof Address) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setPickupAddress({ [field]: e.target.value });
-
-  const updateDropoff = (field: keyof Address) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setDropoffAddress({ [field]: e.target.value });
-
-  return (
-    <AppShell showBack showNav={false} step={1} totalSteps={4}>
-      <div className="px-5 py-6 flex flex-col gap-5">
-
-        {/* Pickup Address */}
-        <Card>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 rounded-full bg-[#E8621A] flex items-center justify-center flex-shrink-0">
-              <PinIcon />
-            </div>
-            <div>
-              <h2 className="font-bold text-[#1C1917] text-[15px]">Pickup Location</h2>
-              <p className="text-[12px] text-[#A8A29E]">Where we pick up your order</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3">
-            <Input
-              label="Street Address"
-              placeholder="123 Main St"
-              value={pickup.street ?? ''}
-              onChange={updatePickup('street')}
-              error={errors.pickupStreet}
-              required
-            />
-            <Input
-              label="Unit / Suite"
-              placeholder="Apt 4B (optional)"
-              value={pickup.unit ?? ''}
-              onChange={updatePickup('unit')}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="City"
-                placeholder="Dallas"
-                value={pickup.city ?? ''}
-                onChange={updatePickup('city')}
-                error={errors.pickupCity}
-                required
-              />
-              <Input
-                label="State"
-                placeholder="TX"
-                value={pickup.state ?? ''}
-                onChange={updatePickup('state')}
-                error={errors.pickupState}
-                required
-                maxLength={2}
-              />
-            </div>
-            <Input
-              label="ZIP Code"
-              placeholder="75201"
-              value={pickup.zip ?? ''}
-              onChange={updatePickup('zip')}
-              error={errors.pickupZip}
-              required
-              maxLength={10}
-            />
-          </div>
-        </Card>
-
-        {/* Route divider */}
-        <div className="flex items-center gap-3 px-2">
-          <div className="flex-1 border-l-2 border-dashed border-[#EEEBE8] ml-4 h-6" />
-          <div className="w-8 h-8 rounded-full bg-[#1C1917] flex items-center justify-center shadow-md flex-shrink-0">
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-          <div className="flex-1 border-l-2 border-dashed border-[#EEEBE8] ml-4 h-6" />
-        </div>
-
-        {/* Drop-off Address */}
-        <Card>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 rounded-full bg-[#1C1917] flex items-center justify-center flex-shrink-0">
-              <PinIcon />
-            </div>
-            <div>
-              <h2 className="font-bold text-[#1C1917] text-[15px]">Drop-off Location</h2>
-              <p className="text-[12px] text-[#A8A29E]">Where we deliver your order</p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3">
-            <Input
-              label="Street Address"
-              placeholder="456 Elm St"
-              value={dropoff.street ?? ''}
-              onChange={updateDropoff('street')}
-              error={errors.dropoffStreet}
-              required
-            />
-            <Input
-              label="Unit / Suite"
-              placeholder="Apt 2A (optional)"
-              value={dropoff.unit ?? ''}
-              onChange={updateDropoff('unit')}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="City"
-                placeholder="Dallas"
-                value={dropoff.city ?? ''}
-                onChange={updateDropoff('city')}
-                error={errors.dropoffCity}
-                required
-              />
-              <Input
-                label="State"
-                placeholder="TX"
-                value={dropoff.state ?? ''}
-                onChange={updateDropoff('state')}
-                error={errors.dropoffState}
-                required
-                maxLength={2}
-              />
-            </div>
-            <Input
-              label="ZIP Code"
-              placeholder="75203"
-              value={dropoff.zip ?? ''}
-              onChange={updateDropoff('zip')}
-              error={errors.dropoffZip}
-              required
-              maxLength={10}
-            />
-          </div>
-        </Card>
-
-        {/* Contact Info */}
-        <Card>
-          <h2 className="font-bold text-[#1C1917] text-[15px] mb-5">Contact Information</h2>
-          <div className="flex flex-col gap-3">
-            <Input
-              label="Full Name"
-              placeholder="Jane Smith"
-              value={contact.name ?? ''}
-              onChange={(e) => setContact({ name: e.target.value })}
-              error={errors.name}
-              required
-            />
-            <Input
-              label="Phone Number"
-              placeholder="+1 (214) 555-0100"
-              value={contact.phone ?? ''}
-              onChange={(e) => setContact({ phone: e.target.value })}
-              error={errors.phone}
-              type="tel"
-              required
-            />
-            <Input
-              label="Email"
-              placeholder="jane@example.com"
-              value={contact.email ?? ''}
-              onChange={(e) => setContact({ email: e.target.value })}
-              error={errors.email}
-              type="email"
-              required
-            />
-          </div>
-        </Card>
-
-        {/* Notes */}
-        <Card>
-          <h2 className="font-bold text-[#1C1917] text-[15px] mb-4">Delivery Notes</h2>
-          <Textarea
-            placeholder="Gate code, fragile items, special instructions…"
-            value={draft.notes ?? ''}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </Card>
-
-        <Button size="lg" fullWidth onClick={handleNext}>
-          Continue →
-        </Button>
-
-        <p className="text-center text-[11px] text-[#C4BFB9] -mt-2">
-          Step 1 of 4 · Delivery details
-        </p>
-      </div>
-    </AppShell>
-  );
-};
+  const contact = draft.contact ?? {};
+  return <form className="customer-stack" onSubmit={submit}>
+    <p className="customer-muted">All addresses must be in the United States. Required fields are marked with an asterisk.</p>
+    {error && <p className="customer-notice" data-tone="error" role="alert">{error}</p>}
+    <AddressFields title="Pickup location" section="pickup" address={draft.pickupAddress ?? {}} update={setPickupAddress} />
+    <AddressFields title="Delivery destination" section="destination" address={draft.dropoffAddress ?? {}} update={setDropoffAddress} />
+    <fieldset className="customer-fieldset customer-card"><legend>Contact information</legend>
+      <Input label="Full name" autoComplete="name" required maxLength={120} value={contact.name ?? ''} onChange={event => setContact({ name: event.target.value })} />
+      <Input label="US phone number" type="tel" autoComplete="tel" required maxLength={30} hint="Include the area code. A US country code (+1) is optional." value={contact.phone ?? ''} onChange={event => setContact({ phone: event.target.value })} />
+      <Input label="Email" type="email" autoComplete="email" required maxLength={254} value={contact.email ?? ''} onChange={event => setContact({ email: event.target.value })} />
+    </fieldset>
+    <section className="customer-card"><h2>Pickup instructions</h2><Textarea label="Delivery notes (optional)" maxLength={1000} hint="Include store order or pickup instructions. Do not include payment details or passwords." value={draft.notes ?? ''} onChange={event => setNotes(event.target.value)} /></section>
+    <button className="customer-button" type="submit">Review delivery details</button>
+  </form>;
+}
+function AddressFields({ title, section, address, update }: { title: string; section: string; address: Partial<Address>; update: (value: Partial<Address>) => void }) {
+  return <fieldset className="customer-fieldset customer-card"><legend>{title}</legend>
+    <Input label="Street address" autoComplete={'section-' + section + ' address-line1'} maxLength={200} required value={address.street ?? ''} onChange={event => update({ street: event.target.value, country: 'US' })} />
+    <Input label="Apartment, unit or suite (optional)" autoComplete={'section-' + section + ' address-line2'} maxLength={80} value={address.unit ?? ''} onChange={event => update({ unit: event.target.value || undefined })} />
+    <Input label="City" autoComplete={'section-' + section + ' address-level2'} maxLength={100} required value={address.city ?? ''} onChange={event => update({ city: event.target.value })} />
+    <div className="customer-field-grid">
+      <Input label="State abbreviation" autoComplete={'section-' + section + ' address-level1'} maxLength={2} minLength={2} pattern="[A-Za-z]{2}" placeholder="TX" required value={address.state ?? ''} onChange={event => update({ state: event.target.value.toUpperCase() })} />
+      <Input label="ZIP code" autoComplete={'section-' + section + ' postal-code'} inputMode="numeric" maxLength={10} pattern="[0-9]{5}(-[0-9]{4})?" required value={address.zip ?? ''} onChange={event => update({ zip: event.target.value })} />
+    </div>
+  </fieldset>;
+}

@@ -1,278 +1,47 @@
-/**
- * Stripe Webhook Hardening Tests
- *
- * Validates:
- * 1. Signature verification — rejects missing/invalid signature when secret set
- * 2. payment_intent.succeeded — updates order, dispatches (idempotency)
- * 3. payment_intent.payment_failed — marks order as failed
- * 4. No double dispatch — idempotency guard
- * 5. Dev mode fallback — no secret = accepts raw body (dev only)
- */
-
 import request from 'supertest';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createApp } from '../src/app.js';
-import {
-  InMemoryStorreeOrderRepository,
-  StorreeOrder,
-  StorreeOrderRepository,
-} from '../src/infrastructure/persistence/postgres-repositories.js';
-import { setStorreeOrderRepository, getStorreeOrderRepository } from '../src/api/orders.js';
+import { describe,it,expect,vi,afterEach } from 'vitest';
+import { fixture } from './customer-checkout-fixtures.js';
+import { configuredStripe } from '../src/domain/customer-payment.js';
 
-const app = createApp();
-
-// Helper: create a test order in the repo
-async function seedOrder(repo: StorreeOrderRepository, overrides: Partial<StorreeOrder> = {}): Promise<StorreeOrder> {
-  const now = new Date();
-  const order: StorreeOrder = {
-    id: 'SR-TEST01',
-    serviceType: 'item_delivery',
-    status: 'pending',
-    pickupAddress: { street: '1 Main St', city: 'Dallas', state: 'TX', zip: '75201', country: 'US' },
-    dropoffAddress: { street: '2 Oak Ln', city: 'Dallas', state: 'TX', zip: '75203', country: 'US' },
-    items: [{ name: 'Shirt', quantity: 1 }],
-    contact: { name: 'Test User', phone: '+13461234567', email: 'test@test.com' },
-    pricing: { subtotal: 0, deliveryFee: 8.99, serviceFee: 1.99, tax: 0.88, total: 11.86, estimatedMinutes: 50 },
-    paymentStatus: 'unpaid',
-    merchantNotified: false,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  };
-  await repo.create(order);
-  return order;
-}
-
-describe('Stripe webhook hardening', () => {
-  let repo: InMemoryStorreeOrderRepository;
-  let prevRepo: StorreeOrderRepository;
-
-  beforeEach(() => {
-    repo = new InMemoryStorreeOrderRepository();
-    prevRepo = getStorreeOrderRepository();
-    setStorreeOrderRepository(repo);
+afterEach(()=>vi.unstubAllEnvs());
+describe('fail-closed signed payment webhook',()=>{
+  it('rejects missing webhook configuration instead of accepting unsigned events',async()=>{
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET','');const f=fixture({webhookSecret:()=>undefined});
+    await request(f.app).post('/api/payments/stripe-webhook').send({type:'payment_intent.succeeded'}).expect(503);
   });
-
-  afterEach(() => {
-    setStorreeOrderRepository(prevRepo);
-    // Clear env overrides
-    delete process.env.STRIPE_WEBHOOK_SECRET;
-    delete process.env.STRIPE_SECRET_KEY;
+  it('rejects missing and invalid signatures using the actual Stripe verifier without API calls',async()=>{
+    vi.stubEnv('STRIPE_SECRET_KEY','sk_test_fixture');const f=fixture({stripe:configuredStripe});
+    await request(f.app).post('/api/payments/stripe-webhook').send({type:'customer.created'}).expect(400);
+    await request(f.app).post('/api/payments/stripe-webhook').set('stripe-signature','t=1234,v1=bad').send({type:'customer.created'}).expect(400);
   });
-
-  describe('signature verification', () => {
-    it('rejects request with missing stripe-signature when STRIPE_WEBHOOK_SECRET is set', async () => {
-      process.env.STRIPE_WEBHOOK_SECRET = 'whsec_testonly';
-      process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
-
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({ type: 'payment_intent.succeeded', data: { object: { id: 'pi_1', metadata: {} } } });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/Missing stripe-signature/);
-    });
-
-    it('rejects request with invalid signature when STRIPE_WEBHOOK_SECRET is set', async () => {
-      process.env.STRIPE_WEBHOOK_SECRET = 'whsec_testonly';
-      process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
-
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .set('stripe-signature', 'v1=badsignature,t=1234')
-        .send({ type: 'payment_intent.succeeded', data: { object: { id: 'pi_1', metadata: {} } } });
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/signature/i);
-    });
-
-    it('accepts raw body in dev mode (no STRIPE_WEBHOOK_SECRET) — returns received:true', async () => {
-      // No STRIPE_WEBHOOK_SECRET set
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({ type: 'payment_intent.payment_failed', data: { object: { id: 'pi_dev', metadata: {} } } });
-
-      expect(res.status).toBe(200);
-      expect(res.body.received).toBe(true);
-    });
+  it('fails closed without Stripe credentials; no development fake success',()=>{
+    vi.stubEnv('STRIPE_SECRET_KEY','');expect(()=>configuredStripe()).toThrow('Payments are not configured');
   });
-
-  describe('payment_intent.succeeded', () => {
-    it('marks order as confirmed and sets paymentStatus=paid on succeeded event', async () => {
-      const order = await seedOrder(repo, { id: 'SR-A1B2C3', status: 'pending', paymentStatus: 'unpaid' });
-
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({
-          type: 'payment_intent.succeeded',
-          data: { object: { id: 'pi_test_succeeded', metadata: { orderId: order.id } } },
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.received).toBe(true);
-
-      const updated = await repo.getById(order.id);
-      expect(updated?.paymentStatus).toBe('paid');
-      expect(updated?.stripePaymentIntentId).toBe('pi_test_succeeded');
-      // Status should advance to at least 'confirmed'
-      expect(['confirmed', 'assigned']).toContain(updated?.status);
-    });
-
-    it('does not double-dispatch if order already has doordashExternalId', async () => {
-      const order = await seedOrder(repo, {
-        id: 'SR-IDEM01',
-        status: 'assigned',
-        doordashExternalId: 'dd_already',
-        paymentStatus: 'paid',
-      });
-
-      let dispatchCalls = 0;
-      const origImport = (global as any).__importDoorDash;
-      // We can't mock the import easily — instead verify order status unchanged
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({
-          type: 'payment_intent.succeeded',
-          data: { object: { id: 'pi_dupe', metadata: { orderId: order.id } } },
-        });
-
-      expect(res.status).toBe(200);
-      // doordashExternalId must not change
-      const after = await repo.getById(order.id);
-      expect(after?.doordashExternalId).toBe('dd_already');
-      void dispatchCalls; void origImport;
-    });
+  it('settles signed matching payment and duplicate events without double dispatch',async()=>{
+    const f=fixture();const a=await f.login();const order=await f.create(a);const pi=await f.pay(a,order.id);
+    const event={id:'evt_match',type:'payment_intent.succeeded',data:{object:f.intents.get(pi.paymentIntentId)}};
+    const post=()=>request(f.app).post('/api/payments/stripe-webhook').set('stripe-signature','valid').send(event);
+    await Promise.all([post().expect(200),post().expect(200)]);
+    expect(f.repository.orders.get(order.id)).toMatchObject({paymentStatus:'paid',stripePaymentIntentId:pi.paymentIntentId,dispatchStatus:'submitted'});expect(f.delivery.create).toHaveBeenCalledTimes(1);
   });
-
-  describe('payment_intent.payment_failed', () => {
-    it('marks pending order as failed when payment_failed event received', async () => {
-      const order = await seedOrder(repo, { id: 'SR-FAIL01', status: 'pending', paymentStatus: 'unpaid' });
-
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({
-          type: 'payment_intent.payment_failed',
-          data: { object: { id: 'pi_failed_123', metadata: { orderId: order.id } } },
-        });
-
-      expect(res.status).toBe(200);
-      expect(res.body.received).toBe(true);
-
-      const updated = await repo.getById(order.id);
-      expect(updated?.status).toBe('failed');
-      expect(updated?.paymentStatus).toBe('failed');
-      expect(updated?.stripePaymentIntentId).toBe('pi_failed_123');
-    });
-
-    it('does not regress already-dispatched order on payment_failed', async () => {
-      // Order already assigned (dispatched) — should NOT be marked failed
-      const order = await seedOrder(repo, {
-        id: 'SR-NOREGRESS',
-        status: 'assigned',
-        paymentStatus: 'paid',
-        doordashExternalId: 'dd_real',
-      });
-
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({
-          type: 'payment_intent.payment_failed',
-          data: { object: { id: 'pi_late_fail', metadata: { orderId: order.id } } },
-        });
-
-      expect(res.status).toBe(200);
-      // Status should remain assigned (payment_failed guard: only applies when pending)
-      const after = await repo.getById(order.id);
-      expect(after?.status).toBe('assigned');
-    });
+  it('refuses a foreign PI and retains pending state on database failure so Stripe can retry',async()=>{
+    const f=fixture();const a=await f.login();const order=await f.create(a);const pi=await f.pay(a,order.id);const intent=f.intents.get(pi.paymentIntentId)!;
+    const post=(value:unknown)=>request(f.app).post('/api/payments/stripe-webhook').set('stripe-signature','valid').send({id:'evt_match',type:'payment_intent.succeeded',data:{object:value}});
+    await post({...intent,id:'pi_foreign'}).expect(409);expect(f.delivery.create).not.toHaveBeenCalled();
+    const spy=vi.spyOn(f.repository,'locked').mockRejectedValueOnce(new Error('Database down'));
+    await post(intent).expect(503);expect(f.repository.orders.get(order.id)!.paymentStatus).toBe('unpaid');spy.mockRestore();
+    await post(intent).expect(200);expect(f.repository.orders.get(order.id)!.paymentStatus).toBe('paid');
   });
-
-  describe('unhandled event types', () => {
-    it('acknowledges unhandled event types gracefully', async () => {
-      const res = await request(app)
-        .post('/api/payments/stripe-webhook')
-        .set('Content-Type', 'application/json')
-        .send({ type: 'customer.created', data: { object: { id: 'cus_1' } } });
-
-      expect(res.status).toBe(200);
-      expect(res.body.received).toBe(true);
-    });
+  it('does not regress a paid terminal order on a late failure or repeated success',async()=>{
+    const f=fixture();const a=await f.login();const order=await f.create(a);const pi=await f.pay(a,order.id);
+    const stored=f.repository.orders.get(order.id)!;stored.paymentStatus='paid';stored.status='delivered';stored.dispatchStatus='submitted';
+    for(const type of ['payment_intent.payment_failed','payment_intent.succeeded'])await request(f.app).post('/api/payments/stripe-webhook').set('stripe-signature','valid').send({id:'evt_late',type,data:{object:f.intents.get(pi.paymentIntentId)}}).expect(200);
+    expect(f.repository.orders.get(order.id)).toMatchObject({paymentStatus:'paid',status:'delivered'});expect(f.delivery.create).not.toHaveBeenCalled();
   });
-});
-
-describe('Postgres order persistence (InMemory repo restart-safety simulation)', () => {
-  let repo: InMemoryStorreeOrderRepository;
-  let prevRepo: StorreeOrderRepository;
-
-  beforeEach(() => {
-    repo = new InMemoryStorreeOrderRepository();
-    prevRepo = getStorreeOrderRepository();
-    setStorreeOrderRepository(repo);
-  });
-
-  afterEach(() => {
-    setStorreeOrderRepository(prevRepo);
-  });
-
-  it('creates an order via POST /api/orders/create and retrieves it', async () => {
-    const createRes = await request(app)
-      .post('/api/orders/create')
-      .send({
-        serviceType: 'item_delivery',
-        pickupAddress: { street: '1 Main St', city: 'Dallas', state: 'TX', zip: '75201', country: 'US' },
-        dropoffAddress: { street: '2 Oak Ln', city: 'Dallas', state: 'TX', zip: '75203', country: 'US' },
-        items: [{ name: 'Shirt', quantity: 1 }],
-        contact: { name: 'Jane Doe', phone: '+13461234567', email: 'jane@example.com' },
-      });
-
-    expect(createRes.status).toBe(201);
-    const { id } = createRes.body;
-    expect(id).toBeTruthy();
-
-    // Retrieve it
-    const getRes = await request(app).get(`/api/orders/${id}`);
-    expect(getRes.status).toBe(200);
-    expect(getRes.body.id).toBe(id);
-    expect(getRes.body.status).toBe('pending');
-    expect(getRes.body.paymentStatus).toBe('unpaid');
-
-    // Confirm it exists in repo directly
-    const inRepo = await repo.getById(id);
-    expect(inRepo).toBeTruthy();
-    expect(inRepo?.id).toBe(id);
-  });
-
-  it('returns 404 for unknown order id', async () => {
-    const res = await request(app).get('/api/orders/SR-NOTEXIST');
-    expect(res.status).toBe(404);
-  });
-
-  it('listActive only returns active-status orders', async () => {
-    const r = getStorreeOrderRepository() as InMemoryStorreeOrderRepository;
-    await seedOrder(r, { id: 'SR-ACT1', status: 'pending' });
-    await seedOrder(r, { id: 'SR-ACT2', status: 'in_transit' });
-    await seedOrder(r, { id: 'SR-DONE', status: 'delivered' });
-
-    const res = await request(app).get('/api/orders/active');
-    expect(res.status).toBe(200);
-    const ids = res.body.map((o: { id: string }) => o.id);
-    expect(ids).toContain('SR-ACT1');
-    expect(ids).toContain('SR-ACT2');
-    expect(ids).not.toContain('SR-DONE');
-  });
-
-  it('getByPaymentIntentId finds order by stripe PI id', async () => {
-    const r = getStorreeOrderRepository() as InMemoryStorreeOrderRepository;
-    await seedOrder(r, { id: 'SR-PI01', stripePaymentIntentId: 'pi_findme' });
-
-    const found = await r.getByPaymentIntentId('pi_findme');
-    expect(found?.id).toBe('SR-PI01');
+  it('retries an event whose durable intent binding is not yet available',async()=>{
+    const f=fixture();const a=await f.login();const order=await f.create(a);const pi=await f.pay(a,order.id);
+    f.repository.orders.get(order.id)!.stripePaymentIntentId=undefined;
+    await request(f.app).post('/api/payments/stripe-webhook').set('stripe-signature','valid').send({id:'evt_early',type:'payment_intent.succeeded',data:{object:f.intents.get(pi.paymentIntentId)}}).expect(503);
+    expect(f.delivery.create).not.toHaveBeenCalled();
   });
 });

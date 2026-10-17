@@ -1,24 +1,15 @@
 import React from 'react';
-import stylereLogoUrl from '../assets/stylere_logo.jpg';
+import { AppShell } from '../components/layout/AppShell';
 
 export const TermsOfService: React.FC = () => {
   return (
-    <div className="font-sans bg-[#FAF9F7] text-[#1C1917] min-h-screen">
-      {/* Header */}
-      <header className="bg-[#1C1917] px-6 py-5 flex items-center justify-between">
-        <a href="/shopify" className="flex items-center gap-3">
-          <img src={stylereLogoUrl} alt="Style.re" className="h-9 w-auto rounded-lg object-contain" />
-        </a>
-        <a href="/shopify" className="text-[#A8A29E] text-sm hover:text-white transition-colors">
-          ← Back to home
-        </a>
-      </header>
+    <AppShell showBack backTo="/support" showNav={false}>
 
       {/* Content */}
-      <main className="max-w-3xl mx-auto px-6 py-16">
-        <h1 className="text-4xl font-bold text-[#1C1917] mb-3 tracking-tight">Terms of Service</h1>
-        <p className="text-[#78716C] text-sm mb-10">
-          Last updated: March 23, 2025 &nbsp;·&nbsp; Style.re Unlimited Co., a Delaware company
+      <article className="customer-legal">
+        <h1 className="text-4xl font-bold text-[#18212b] mb-3 tracking-tight">Terms of Service</h1>
+        <p className="text-[#5b6570] text-sm mb-10">
+          Last updated: October 17, 2026 &nbsp;·&nbsp; Style.re Unlimited Co., a Delaware company
         </p>
 
         <Section title="1. Agreement to Terms">
@@ -81,14 +72,14 @@ export const TermsOfService: React.FC = () => {
           <p className="mt-3">
             <strong>No Delivery Guarantee.</strong> Style.re expressly disclaims any guarantee of delivery
             completion, delivery time, or delivery cost. In the event of a failed delivery, Merchants should
-            contact support at <a href="mailto:ryan@stylere.app" className="underline text-[#1C1917]">ryan@stylere.app</a> or
+            contact support at <a href="mailto:ryan@stylere.app" className="underline text-[#18212b]">ryan@stylere.app</a> or
             (346) 475-5016 for resolution.
           </p>
         </Section>
 
         <Section title="5. Payment Terms">
           <p>
-            <strong>Free to Install.</strong> There is no monthly subscription fee for the App.
+            <strong>Merchant Plans.</strong> Account charges depend on the selected merchant plan. Review the <a href="/shopify/merchant/pricing" className="underline">current plans and pricing</a> before subscribing.
           </p>
           <p className="mt-3">
             <strong>Per-Delivery Fees.</strong> Merchants pay a per-delivery fee for each fulfilled delivery.
@@ -102,7 +93,7 @@ export const TermsOfService: React.FC = () => {
           </p>
           <p className="mt-3">
             <strong>Disputes.</strong> Billing disputes must be raised within 30 days of the charge by
-            contacting <a href="mailto:ryan@stylere.app" className="underline text-[#1C1917]">ryan@stylere.app</a>.
+            contacting <a href="mailto:ryan@stylere.app" className="underline text-[#18212b]">ryan@stylere.app</a>.
           </p>
         </Section>
 
@@ -202,28 +193,19 @@ export const TermsOfService: React.FC = () => {
 
         <Section title="14. Contact Us">
           <p>For questions about these Terms:</p>
-          <div className="mt-4 bg-white rounded-2xl p-6 border border-[#E7E5E4]">
-            <p className="font-semibold text-[#1C1917]">Style.re Unlimited Co.</p>
-            <p className="text-[#78716C] mt-1">Delaware, United States</p>
+          <div className="mt-4 bg-white rounded-2xl p-6 border border-[#e3e5e7]">
+            <p className="font-semibold text-[#18212b]">Style.re Unlimited Co.</p>
+            <p className="text-[#5b6570] mt-1">Delaware, United States</p>
             <p className="mt-2">
-              <a href="mailto:ryan@stylere.app" className="text-[#1C1917] font-medium underline">ryan@stylere.app</a>
+              <a href="mailto:ryan@stylere.app" className="text-[#18212b] font-medium underline">ryan@stylere.app</a>
             </p>
-            <p className="mt-1 text-[#78716C]">(346) 475-5016</p>
+            <p className="mt-1 text-[#5b6570]">(346) 475-5016</p>
           </div>
         </Section>
-      </main>
+      </article>
 
-      {/* Footer */}
-      <footer className="border-t border-[#E7E5E4] px-6 py-8 text-center">
-        <p className="text-[#A8A29E] text-sm">
-          © {new Date().getFullYear()} Style.re Unlimited Co. All rights reserved.
-          &nbsp;·&nbsp;
-          <a href="/shopify/privacy" className="hover:text-[#1C1917] transition-colors">Privacy Policy</a>
-          &nbsp;·&nbsp;
-          <a href="/shopify/support" className="hover:text-[#1C1917] transition-colors">Support</a>
-        </p>
-      </footer>
-    </div>
+
+    </AppShell>
   );
 };
 
@@ -231,8 +213,8 @@ export const TermsOfService: React.FC = () => {
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <section className="mb-10">
-    <h2 className="text-xl font-bold text-[#1C1917] mb-4 pb-2 border-b border-[#E7E5E4]">{title}</h2>
-    <div className="text-[#44403C] leading-relaxed space-y-2">{children}</div>
+    <h2 className="text-xl font-bold text-[#18212b] mb-4 pb-2 border-b border-[#e3e5e7]">{title}</h2>
+    <div className="text-[#5b6570] leading-relaxed space-y-2">{children}</div>
   </section>
 );
 

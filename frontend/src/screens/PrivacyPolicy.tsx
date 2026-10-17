@@ -1,24 +1,15 @@
 import React from 'react';
-import stylereLogoUrl from '../assets/stylere_logo.jpg';
+import { AppShell } from '../components/layout/AppShell';
 
 export const PrivacyPolicy: React.FC = () => {
   return (
-    <div className="font-sans bg-[#FAF9F7] text-[#1C1917] min-h-screen">
-      {/* Header */}
-      <header className="bg-[#1C1917] px-6 py-5 flex items-center justify-between">
-        <a href="/shopify" className="flex items-center gap-3">
-          <img src={stylereLogoUrl} alt="Style.re" className="h-9 w-auto rounded-lg object-contain" />
-        </a>
-        <a href="/shopify" className="text-[#A8A29E] text-sm hover:text-white transition-colors">
-          ← Back to home
-        </a>
-      </header>
+    <AppShell showBack backTo="/support" showNav={false}>
 
       {/* Content */}
-      <main className="max-w-3xl mx-auto px-6 py-16">
-        <h1 className="text-4xl font-bold text-[#1C1917] mb-3 tracking-tight">Privacy Policy</h1>
-        <p className="text-[#78716C] text-sm mb-10">
-          Last updated: March 23, 2025 &nbsp;·&nbsp; Style.re Unlimited Co., a Delaware company
+      <article className="customer-legal">
+        <h1 className="text-4xl font-bold text-[#18212b] mb-3 tracking-tight">Privacy Policy</h1>
+        <p className="text-[#5b6570] text-sm mb-10">
+          Last updated: October 17, 2026 &nbsp;·&nbsp; Style.re Unlimited Co., a Delaware company
         </p>
 
         <Section title="1. Introduction">
@@ -81,7 +72,7 @@ export const PrivacyPolicy: React.FC = () => {
             <ThirdParty name="Stripe" purpose="Payment processing for per-delivery fees" link="https://stripe.com/privacy" />
             <ThirdParty name="Twilio" purpose="SMS notifications to customers and couriers" link="https://www.twilio.com/en-us/legal/privacy" />
           </div>
-          <p className="mt-4 text-sm text-[#78716C]">
+          <p className="mt-4 text-sm text-[#5b6570]">
             We do not sell your personal information to third parties for advertising or marketing purposes.
           </p>
         </Section>
@@ -90,8 +81,8 @@ export const PrivacyPolicy: React.FC = () => {
           <p>We retain data as follows:</p>
           <ul className="list-disc pl-5 space-y-2 mt-3">
             <li><strong>Merchant account data</strong> — retained for the duration of App installation plus 90 days after uninstall</li>
-            <li><strong>Order and delivery records</strong> — retained for 2 years for accounting and dispute resolution</li>
-            <li><strong>Customer delivery addresses</strong> — retained for 90 days after order fulfillment, then deleted</li>
+            <li><strong>Order and delivery records</strong> — our order-data retention period is 90 days after each order is completed</li>
+            <li><strong>Customer delivery addresses</strong> — the same 90-day retention period applies after each order is completed</li>
             <li><strong>Access tokens</strong> — deleted immediately upon App uninstall via Shopify webhook</li>
           </ul>
           <p className="mt-3">
@@ -131,7 +122,7 @@ export const PrivacyPolicy: React.FC = () => {
             <li>Opt out of the sale of personal information — <em>we do not sell personal information</em></li>
             <li>Non-discrimination for exercising your CCPA rights</li>
           </ul>
-          <p className="mt-3">To exercise your rights, contact us at <a href="mailto:ryan@stylere.app" className="text-[#1C1917] underline">ryan@stylere.app</a>.</p>
+          <p className="mt-3">To exercise your rights, contact us at <a href="mailto:ryan@stylere.app" className="text-[#18212b] underline">ryan@stylere.app</a>.</p>
         </Section>
 
         <Section title="8. Data Security">
@@ -159,27 +150,18 @@ export const PrivacyPolicy: React.FC = () => {
 
         <Section title="11. Contact Us">
           <p>For privacy-related questions, requests, or concerns:</p>
-          <div className="mt-4 bg-white rounded-2xl p-6 border border-[#E7E5E4]">
-            <p className="font-semibold text-[#1C1917]">Style.re Unlimited Co.</p>
-            <p className="text-[#78716C] mt-1">Delaware, United States</p>
+          <div className="mt-4 bg-white rounded-2xl p-6 border border-[#e3e5e7]">
+            <p className="font-semibold text-[#18212b]">Style.re Unlimited Co.</p>
+            <p className="text-[#5b6570] mt-1">Delaware, United States</p>
             <p className="mt-2">
-              <a href="mailto:ryan@stylere.app" className="text-[#1C1917] font-medium underline">ryan@stylere.app</a>
+              <a href="mailto:ryan@stylere.app" className="text-[#18212b] font-medium underline">ryan@stylere.app</a>
             </p>
           </div>
         </Section>
-      </main>
+      </article>
 
-      {/* Footer */}
-      <footer className="border-t border-[#E7E5E4] px-6 py-8 text-center">
-        <p className="text-[#A8A29E] text-sm">
-          © {new Date().getFullYear()} Style.re Unlimited Co. All rights reserved.
-          &nbsp;·&nbsp;
-          <a href="/shopify/terms" className="hover:text-[#1C1917] transition-colors">Terms of Service</a>
-          &nbsp;·&nbsp;
-          <a href="/shopify/support" className="hover:text-[#1C1917] transition-colors">Support</a>
-        </p>
-      </footer>
-    </div>
+
+    </AppShell>
   );
 };
 
@@ -187,24 +169,24 @@ export const PrivacyPolicy: React.FC = () => {
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <section className="mb-10">
-    <h2 className="text-xl font-bold text-[#1C1917] mb-4 pb-2 border-b border-[#E7E5E4]">{title}</h2>
-    <div className="text-[#44403C] leading-relaxed space-y-2">{children}</div>
+    <h2 className="text-xl font-bold text-[#18212b] mb-4 pb-2 border-b border-[#e3e5e7]">{title}</h2>
+    <div className="text-[#5b6570] leading-relaxed space-y-2">{children}</div>
   </section>
 );
 
 const Subsection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="mb-4">
-    <h3 className="font-semibold text-[#1C1917] mb-2">{title}</h3>
-    <div className="text-[#44403C] leading-relaxed">{children}</div>
+    <h3 className="font-semibold text-[#18212b] mb-2">{title}</h3>
+    <div className="text-[#5b6570] leading-relaxed">{children}</div>
   </div>
 );
 
 const ThirdParty: React.FC<{ name: string; purpose: string; link: string }> = ({ name, purpose, link }) => (
   <div className="flex gap-3 items-start">
-    <div className="w-2 h-2 rounded-full bg-[#1C1917] mt-2 flex-shrink-0" />
+    <div className="w-2 h-2 rounded-full bg-[#18212b] mt-2 flex-shrink-0" />
     <div>
-      <a href={link} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#1C1917] underline">{name}</a>
-      <span className="text-[#78716C]"> — {purpose}</span>
+      <a href={link} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#18212b] underline">{name}</a>
+      <span className="text-[#5b6570]"> — {purpose}</span>
     </div>
   </div>
 );
