@@ -1,211 +1,110 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { merchantApi, type Plan, type RegisterBody } from '../../api/merchantApi';
+import { useMerchantAuth } from '../../context/merchantAuthState';
+import { useMerchantSession } from '../../context/useMerchantSession';
+import { confirmedMerchantPlans, confirmedRegistration, confirmedRegistrationInput, merchantPlanPrice } from '../../lib/merchantPageContracts';
+import './merchant-pages.css';
 
-export const MerchantSignup: React.FC = () => {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const requestedPlan = searchParams.get('plan');
+const fields = [
+  { key:'first_name', label:'First name', autoComplete:'given-name' },
+  { key:'last_name', label:'Last name', autoComplete:'family-name' },
+  { key:'email', label:'Email', autoComplete:'email', type:'email', required:true },
+  { key:'password', label:'Password', autoComplete:'new-password', type:'password', required:true },
+  { key:'store_name', label:'Store name', autoComplete:'organization', required:true },
+  { key:'city', label:'City', autoComplete:'address-level2' },
+  { key:'state', label:'State code', autoComplete:'address-level1' },
+] as const;
+
+export function MerchantSignup() {
+  const [params] = useSearchParams();
+  const session = useMerchantSession();
+  const requestedPlan = params.get('plan') || '';
+  return <MerchantSignupForm key={`${session.key}:${requestedPlan}`} requestedPlan={requestedPlan} />;
+}
+
+function MerchantSignupForm({ requestedPlan }: { requestedPlan:string }) {
+  const { merchant, token, error: authError, sessionKey, sessionSignal, isGenerationCurrent, loading: authLoading } = useMerchantAuth();
+  const [form, setForm] = useState<RegisterBody>({ first_name:'',last_name:'',email:'',password:'',store_name:'',city:'',state:'',plan:'' });
   const [plans, setPlans] = useState<Plan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [plansError, setPlansError] = useState(false);
-
-  const [form, setForm] = useState<RegisterBody>({
-    first_name: '',
-    last_name: '',
-    email: '',
-    password: '',
-    store_name: '',
-    city: '',
-    state: '',
-    plan: '',
-  });
-
-  useEffect(() => {
-    let active = true;
-    merchantApi.plans()
-      .then(({ plans: availablePlans }) => {
-        if (!active) return;
-        const validPlans = (availablePlans || []).filter(
-          (plan) => plan.id && plan.name && Number.isFinite(plan.price_cents) && plan.price_cents >= 0
-        );
-        if (validPlans.length === 0) {
-          setPlansError(true);
-          return;
-        }
-        setPlans(validPlans);
-        setForm((current) => ({
-          ...current,
-          plan: validPlans.find((plan) => plan.id === requestedPlan)?.id ?? validPlans[0].id,
-        }));
-      })
-      .catch(() => { if (active) setPlansError(true); })
-      .finally(() => { if (active) setPlansLoading(false); });
-    return () => { active = false; };
-  }, [requestedPlan]);
+  const [retry, setRetry] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState(false);
+  const retryPlans = () => { setPlansLoading(true); setPlansError(false); setPlans([]); setRetry(value => value + 1); };
+  const mounted = useRef(true), busy = useRef(false), request = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    const abort = () => request.current?.abort();
+    sessionSignal.addEventListener('abort', abort, { once:true });
+    return () => { mounted.current = false; sessionSignal.removeEventListener('abort', abort); abort(); };
+  }, [sessionSignal]);
+  useEffect(() => {
+    const controller = new AbortController();
+    merchantApi.plans(controller.signal).then(value => {
+      if (controller.signal.aborted) return;
+      const available = confirmedMerchantPlans(value);
+      setPlans(available);
+      setForm(current => ({ ...current, plan: available.find(plan => plan.id === requestedPlan)?.id || available[0].id }));
+    }).catch(() => { if (!controller.signal.aborted) setPlansError(true); })
+      .finally(() => { if (!controller.signal.aborted) setPlansLoading(false); });
+    return () => controller.abort();
+  }, [requestedPlan, retry]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (plansLoading || plansError || !plans.some((plan) => plan.id === form.plan)) {
-      setError('Current plans are unavailable. Please try again later.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-
+  const handleSubmit = async (event:FormEvent) => {
+    event.preventDefault();
+    if (!mounted.current || busy.current || recovery || merchant || token || authError || authLoading || plansLoading || plansError || !isGenerationCurrent(sessionKey, null)) return;
+    let body:RegisterBody;
+    try { body = confirmedRegistrationInput(form, plans); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : 'Review your details.'); return; }
+    busy.current = true; setLoading(true); setError(null);
+    const controller = new AbortController(); request.current = controller;
     try {
-      const data = await merchantApi.register(form);
-
-      if (!data.checkout_url) {
-        setError('The account request was received, but its payment link is unavailable. Sign in to check your account before trying again.');
-        setLoading(false);
+      const value = await merchantApi.register(body, controller.signal);
+      if (!mounted.current || controller.signal.aborted || !isGenerationCurrent(sessionKey, null)) return;
+      const confirmed = confirmedRegistration(value, body);
+      setRecovery(true);
+      if (!confirmed.checkoutUrl) {
+        setError('Your account was created, but its payment link is unavailable. Sign in to review billing or contact support before trying again.');
         return;
       }
-      window.location.href = data.checkout_url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
-      setLoading(false);
+      window.location.assign(confirmed.checkoutUrl);
+    } catch {
+      if (!mounted.current || controller.signal.aborted || !isGenerationCurrent(sessionKey, null)) return;
+      setRecovery(true);
+      setError('We could not confirm the account and checkout result. Sign in to check your account or contact support before submitting again.');
+    } finally {
+      if (mounted.current && !controller.signal.aborted) { busy.current = false; setLoading(false); }
     }
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    background: '#18181b',
-    border: '1px solid #27272a',
-    borderRadius: 8,
-    padding: '12px 14px',
-    color: '#fff',
-    fontSize: 15,
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    color: '#a1a1aa',
-    fontSize: 13,
-    marginBottom: 6,
-    fontWeight: 500,
-  };
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#09090b', color: '#fff', fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <header style={{ padding: '20px 32px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-          onClick={() => navigate('/merchant/pricing')}
-        >
-          <div style={{ width: 32, height: 32, background: '#f59e0b', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 16 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 18 }}>Storree</span>
-        </div>
-        <span style={{ color: '#52525b', fontSize: 14 }}>
-          Already have an account?{' '}
-          <button onClick={() => navigate('/merchant/login')} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer', fontSize: 14, padding: 0 }}>
-            Sign in
-          </button>
-        </span>
-      </header>
-
-      {/* Form */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-        <div style={{ width: '100%', maxWidth: 480 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px' }}>Create your account</h1>
-          <p style={{ color: '#71717a', marginBottom: 32 }}>Start delivering in under an hour.</p>
-
-          {error && (
-            <div style={{ background: '#450a0a', border: '1px solid #7f1d1d', borderRadius: 8, padding: '12px 16px', marginBottom: 20, color: '#fca5a5', fontSize: 14 }}>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <div>
-                <label style={labelStyle}>First Name</label>
-                <input name="first_name" value={form.first_name} onChange={handleChange} style={inputStyle} placeholder="Ry" />
-              </div>
-              <div>
-                <label style={labelStyle}>Last Name</label>
-                <input name="last_name" value={form.last_name} onChange={handleChange} style={inputStyle} placeholder="Jordan" />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Email *</label>
-              <input name="email" type="email" value={form.email} onChange={handleChange} required style={inputStyle} placeholder="you@store.com" />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Password *</label>
-              <input name="password" type="password" value={form.password} onChange={handleChange} required style={inputStyle} placeholder="Minimum 8 characters" minLength={8} />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Store Name *</label>
-              <input name="store_name" value={form.store_name} onChange={handleChange} required style={inputStyle} placeholder="Boutique on Main" />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 16 }}>
-              <div>
-                <label style={labelStyle}>City</label>
-                <input name="city" value={form.city} onChange={handleChange} style={inputStyle} placeholder="Dallas" />
-              </div>
-              <div>
-                <label style={labelStyle}>State</label>
-                <input name="state" value={form.state} onChange={handleChange} style={inputStyle} placeholder="TX" maxLength={2} />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 28 }}>
-              <label style={labelStyle}>Plan</label>
-              {plansLoading && <p role="status">Loading plans...</p>}
-              {plansError && <p role="alert">Current plans are unavailable. Please try again later.</p>}
-              <select name="plan" value={form.plan} onChange={handleChange} disabled={plansLoading || plansError} style={{ ...inputStyle, cursor: 'pointer' }}>
-                {plans.map((plan) => (
-                  <option key={plan.id} value={plan.id}>
-                    {plan.name} — {plan.price_display || `$${(plan.price_cents / 100).toFixed(2)}`}/month
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || plansLoading || plansError || !form.plan}
-              style={{
-                width: '100%',
-                background: '#f59e0b',
-                color: '#09090b',
-                border: 'none',
-                padding: '15px 24px',
-                borderRadius: 10,
-                fontWeight: 700,
-                fontSize: 16,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading ? 'Creating account...' : 'Pay & Create Account'}
-            </button>
-          </form>
-
-          <p style={{ color: '#52525b', fontSize: 12, textAlign: 'center', marginTop: 20 }}>
-            By creating an account you agree to our{' '}
-            <a href="/shopify/terms" style={{ color: '#a1a1aa' }}>Terms of Service</a>{' '}
-            and{' '}
-            <a href="/shopify/privacy" style={{ color: '#a1a1aa' }}>Privacy Policy</a>.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
+  return <div className="merchant-pages">
+    <header><Link to="/" className="merchant-brand">Storree</Link><nav aria-label="Merchant navigation"><Link to="/merchant/pricing">Plans</Link><Link to="/merchant/login">Sign in</Link></nav></header>
+    <main><div className="merchant-form">
+      <h1>Create your merchant account</h1><p className="merchant-muted">Review a current plan, then continue to hosted checkout. Payment and plan activation must be confirmed before delivery services are enabled.</p>
+      {authLoading ? <p role="status">Checking account…</p> : merchant ? <div className="merchant-notice"><p>You are already signed in. Manage your existing account from billing.</p><Link to="/merchant/dashboard?tab=billing">Review billing</Link></div> : token || authError ? <div role="alert" className="merchant-alert"><p>Your existing account session needs verification before you can create an account.</p><div className="merchant-actions"><Link to="/merchant/login">Sign in to verify your account</Link><Link to="/support">Contact support</Link></div></div> : <>
+        {error && <div role="alert" className="merchant-alert"><p>{error}</p>{recovery && <div className="merchant-actions"><Link to="/merchant/login">Sign in to check your account</Link><Link to="/support">Contact support</Link></div>}</div>}
+        <form onSubmit={handleSubmit} aria-busy={loading}>
+          {fields.map(field => <div className="merchant-field" key={field.key}>
+            <label htmlFor={`signup-${field.key}`}>{field.label}{'required' in field && field.required ? ' *' : ''}</label>
+            <input id={`signup-${field.key}`} name={field.key} type={'type' in field ? field.type : 'text'} autoComplete={field.autoComplete}
+              required={'required' in field && field.required} minLength={field.key === 'password' ? 8 : undefined} maxLength={field.key === 'state' ? 2 : undefined}
+              value={form[field.key] || ''} disabled={loading || recovery} onChange={event => setForm(current => ({ ...current, [field.key]:event.target.value }))} />
+          </div>)}
+          <div className="merchant-field"><label htmlFor="signup-plan">Monthly plan *</label>
+            {plansLoading && <p role="status">Loading plans...</p>}
+            {plansError && <div role="alert"><p>Current plans are unavailable. Please try again.</p><button type="button" onClick={retryPlans}>Retry plans</button></div>}
+            <select id="signup-plan" name="plan" value={form.plan} disabled={plansLoading || plansError || loading || recovery} onChange={event => setForm(current => ({ ...current, plan:event.target.value }))} required>
+              {plans.map(plan => <option key={plan.id} value={plan.id}>{plan.name} — {merchantPlanPrice(plan)}</option>)}
+            </select>
+          </div>
+          <button type="submit" disabled={loading || recovery || plansLoading || plansError || !form.plan}>{loading ? 'Creating account…' : 'Create account & continue to payment'}</button>
+        </form>
+        <p className="merchant-muted">By creating an account you agree to our <Link to="/terms">Terms of Service</Link> and <Link to="/privacy">Privacy Policy</Link>.</p>
+      </>}
+    </div></main>
+  </div>;
+}
 export default MerchantSignup;

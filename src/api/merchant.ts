@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import Stripe from 'stripe';
 import { createPostgresPool } from '../infrastructure/db/postgres.js';
+import { MerchantOrderError, MerchantOrderRepository, parseMerchantOrderFilters } from '../infrastructure/persistence/merchant-orders.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,9 @@ function getStripe(): Stripe | null {
 }
 
 function getJwtSecret(): string {
-  return process.env.MERCHANT_JWT_SECRET ?? 'dev-merchant-jwt-secret-change-in-production';
+  const secret = process.env.MERCHANT_JWT_SECRET;
+  if (!secret?.trim()) throw new Error('Merchant authentication is not configured');
+  return secret;
 }
 
 function hashToken(token: string): string {
@@ -74,22 +77,30 @@ export async function merchantAuthMiddleware(
     return;
   }
 
+  let secret: string;
+  try { secret = getJwtSecret(); }
+  catch { res.status(503).json({ error: 'Authentication is temporarily unavailable' }); return; }
+  let merchantId: string;
   try {
-    const payload = jwt.verify(token, getJwtSecret()) as { sub: string; type: string };
-    if (payload.type !== 'merchant') {
+    const payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
+    if (typeof payload === 'string' || payload.type !== 'merchant' || typeof payload.sub !== 'string'
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.sub)) {
       res.status(401).json({ error: 'Invalid token type' });
       return;
     }
+    merchantId = payload.sub;
+  } catch { res.status(401).json({ error: 'Invalid or expired token' }); return; }
 
-    const pool = getPool();
+  let pool: ReturnType<typeof getPool> | undefined;
+  try {
+    pool = getPool();
     const tokenHash = hashToken(token);
 
     // Check session is valid (not logged out, not expired)
     const sessionResult = await pool.query(
       `SELECT id FROM merchant_sessions WHERE merchant_id = $1 AND token_hash = $2 AND expires_at > NOW()`,
-      [payload.sub, tokenHash]
+      [merchantId, tokenHash]
     );
-    await pool.end();
 
     if (sessionResult.rows.length === 0) {
       res.status(401).json({ error: 'Session expired or logged out' });
@@ -97,12 +108,10 @@ export async function merchantAuthMiddleware(
     }
 
     // Fetch merchant
-    const pool2 = getPool();
-    const merchantResult = await pool2.query<Merchant>(
+    const merchantResult = await pool.query<Merchant>(
       `SELECT * FROM merchants WHERE id = $1`,
-      [payload.sub]
+      [merchantId]
     );
-    await pool2.end();
 
     if (merchantResult.rows.length === 0) {
       res.status(401).json({ error: 'Merchant not found' });
@@ -110,10 +119,13 @@ export async function merchantAuthMiddleware(
     }
 
     req.merchant = merchantResult.rows[0];
-    next();
   } catch {
-    res.status(401).json({ error: 'Invalid or expired token' });
+    res.status(503).json({ error: 'Authentication is temporarily unavailable. Try again.' });
+    return;
+  } finally {
+    await pool?.end().catch(() => undefined);
   }
+  next();
 }
 
 export async function requireActivePlan(
@@ -183,6 +195,8 @@ export function createMerchantRouter(): express.Router {
 
   // ── POST /merchant/auth/register ────────────────────────────────────────
   router.post('/merchant/auth/register', async (req, res) => {
+    try { getJwtSecret(); }
+    catch { return res.status(503).json({ error: 'Authentication is temporarily unavailable' }); }
     try {
       const { email, password, first_name, last_name, store_name, city, state, plan } = req.body as {
         email?: string;
@@ -285,6 +299,8 @@ export function createMerchantRouter(): express.Router {
 
   // ── POST /merchant/auth/login ────────────────────────────────────────────
   router.post('/merchant/auth/login', async (req, res) => {
+    try { getJwtSecret(); }
+    catch { return res.status(503).json({ error: 'Authentication is temporarily unavailable' }); }
     try {
       const { email, password } = req.body as { email?: string; password?: string };
       if (!email || !password) {
@@ -575,203 +591,47 @@ export function createMerchantRouter(): express.Router {
     }
   });
 
-  // ── GET /merchant/dashboard ──────────────────────────────────────────────
-  router.get(
-    '/merchant/dashboard',
-    merchantAuthMiddleware as express.RequestHandler,
-    requireActivePlan as express.RequestHandler,
+  // Merchant order access uses the shipped JSON schema and explicit account ownership.
+  const orderGuards = [merchantAuthMiddleware as express.RequestHandler, requireActivePlan as express.RequestHandler];
+  const orderHandler = (work: (repository: MerchantOrderRepository, req: AuthenticatedRequest) => Promise<{ body: unknown; status?: number }>): express.RequestHandler =>
     async (req: AuthenticatedRequest, res) => {
+      const pool = getPool();
       try {
-        const merchant = req.merchant!;
-        const pool = getPool();
-
-        // Stats from storree_orders if the merchant has a shop domain, else delivery_jobs
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-
-        let stats = { active: 0, pending: 0, completed_today: 0, failed: 0, total: 0 };
-
-        // Try storree_orders first
-        const ordersResult = await pool.query(
-          `SELECT status, COUNT(*) as count FROM storree_orders
-           WHERE created_at >= NOW() - INTERVAL '30 days'
-           GROUP BY status`
-        );
-
-        for (const row of ordersResult.rows as Array<{ status: string; count: string }>) {
-          const c = parseInt(row.count);
-          if (['assigned', 'picked_up', 'en_route'].includes(row.status)) stats.active += c;
-          else if (row.status === 'pending') stats.pending += c;
-          else if (row.status === 'delivered') stats.completed_today += c;
-          else if (['failed', 'cancelled'].includes(row.status)) stats.failed += c;
-          stats.total += c;
+        const result = await work(new MerchantOrderRepository(pool), req);
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(result.status ?? 200).json(result.body);
+      } catch (error) {
+        if (error instanceof MerchantOrderError) res.status(error.status).json({ error: error.message });
+        else {
+          console.error('[merchant] owned order operation failed');
+          res.status(503).json({ error: 'Order records could not be confirmed. Refresh or check the saved request before retrying.' });
         }
+      } finally { await pool.end(); }
+    };
 
-        const recentOrders = await pool.query(
-          `SELECT id, customer_name, customer_phone, status, total_amount_cents, created_at
-           FROM storree_orders
-           ORDER BY created_at DESC
-           LIMIT 5`
-        );
+  router.get('/merchant/dashboard', ...orderGuards, orderHandler(async (repository, req) => {
+    const merchant = req.merchant!;
+    return { body: { merchant: { id: merchant.id, store_name: merchant.store_name, plan: merchant.plan, plan_status: merchant.plan_status },
+      ...await repository.dashboard(merchant.id) } };
+  }));
 
-        await pool.end();
+  router.get('/merchant/orders', ...orderGuards, orderHandler(async (repository, req) => ({
+    body: await repository.list(req.merchant!.id, parseMerchantOrderFilters(req.query)),
+  })));
 
-        return res.json({
-          merchant: {
-            id: merchant.id,
-            store_name: merchant.store_name,
-            plan: merchant.plan,
-            plan_status: merchant.plan_status
-          },
-          stats,
-          recent_orders: recentOrders.rows
-        });
-      } catch (err) {
-        console.error('[merchant] dashboard error:', err);
-        return res.status(500).json({ error: 'Failed to fetch dashboard data' });
-      }
-    }
-  );
+  // Registered before /:id so uncertain creations can be recovered by their stable request ID.
+  router.get('/merchant/orders/requests/:requestId', ...orderGuards, orderHandler(async (repository, req) => ({
+    body: await repository.request(req.merchant!.id, req.params.requestId),
+  })));
 
-  // ── GET /merchant/orders ─────────────────────────────────────────────────
-  router.get(
-    '/merchant/orders',
-    merchantAuthMiddleware as express.RequestHandler,
-    requireActivePlan as express.RequestHandler,
-    async (req: AuthenticatedRequest, res) => {
-      try {
-        const page = Math.max(1, parseInt(req.query.page as string ?? '1'));
-        const limit = Math.min(50, parseInt(req.query.limit as string ?? '20'));
-        const offset = (page - 1) * limit;
-        const status = req.query.status as string | undefined;
+  router.get('/merchant/orders/:id', ...orderGuards, orderHandler(async (repository, req) => ({
+    body: await repository.detail(req.merchant!.id, req.params.id),
+  })));
 
-        const pool = getPool();
-
-        let query = `SELECT id, customer_name, customer_phone, customer_email, delivery_address,
-          status, total_amount_cents, created_at, updated_at
-          FROM storree_orders`;
-        const params: (string | number)[] = [];
-        if (status) {
-          query += ` WHERE status = $1`;
-          params.push(status);
-        }
-        query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-        params.push(limit, offset);
-
-        const result = await pool.query(query, params);
-
-        const countQuery = status
-          ? `SELECT COUNT(*) FROM storree_orders WHERE status = $1`
-          : `SELECT COUNT(*) FROM storree_orders`;
-        const countResult = await pool.query(countQuery, status ? [status] : []);
-
-        await pool.end();
-
-        return res.json({
-          orders: result.rows,
-          pagination: {
-            page,
-            limit,
-            total: parseInt(countResult.rows[0].count),
-            pages: Math.ceil(parseInt(countResult.rows[0].count) / limit)
-          }
-        });
-      } catch (err) {
-        console.error('[merchant] orders error:', err);
-        return res.status(500).json({ error: 'Failed to fetch orders' });
-      }
-    }
-  );
-
-  // ── GET /merchant/orders/:id ─────────────────────────────────────────────
-  router.get(
-    '/merchant/orders/:id',
-    merchantAuthMiddleware as express.RequestHandler,
-    requireActivePlan as express.RequestHandler,
-    async (req: AuthenticatedRequest, res) => {
-      try {
-        const pool = getPool();
-        const result = await pool.query(`SELECT * FROM storree_orders WHERE id = $1`, [req.params.id]);
-
-        if (result.rows.length === 0) {
-          await pool.end();
-          return res.status(404).json({ error: 'Order not found' });
-        }
-
-        const order = result.rows[0];
-
-        // Fetch related delivery job and dispatch attempts for tracking
-        const jobResult = await pool.query(
-          `SELECT dj.*, da.attempted_at, da.status as attempt_status, da.provider_response
-           FROM delivery_jobs dj
-           LEFT JOIN dispatch_attempts da ON da.job_id = dj.id
-           WHERE dj.shopify_order_id = $1
-           ORDER BY da.attempted_at DESC`,
-          [order.id]
-        );
-
-        await pool.end();
-
-        return res.json({ order, tracking: jobResult.rows });
-      } catch (err) {
-        console.error('[merchant] order detail error:', err);
-        return res.status(500).json({ error: 'Failed to fetch order details' });
-      }
-    }
-  );
-
-  // ── POST /merchant/orders ────────────────────────────────────────────────
-  router.post(
-    '/merchant/orders',
-    merchantAuthMiddleware as express.RequestHandler,
-    requireActivePlan as express.RequestHandler,
-    async (req: AuthenticatedRequest, res) => {
-      try {
-        const {
-          customer_name,
-          customer_phone,
-          customer_email,
-          delivery_address,
-          items,
-          total_amount_cents
-        } = req.body as {
-          customer_name?: string;
-          customer_phone?: string;
-          customer_email?: string;
-          delivery_address?: string;
-          items?: unknown;
-          total_amount_cents?: number;
-        };
-
-        if (!customer_name || !delivery_address) {
-          return res.status(400).json({ error: 'customer_name and delivery_address are required' });
-        }
-
-        const pool = getPool();
-        const result = await pool.query(
-          `INSERT INTO storree_orders
-           (id, customer_name, customer_phone, customer_email, delivery_address, items, total_amount_cents, status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW(), NOW())
-           RETURNING *`,
-          [
-            randomUUID(),
-            customer_name,
-            customer_phone ?? null,
-            customer_email ?? null,
-            delivery_address,
-            items ? JSON.stringify(items) : null,
-            total_amount_cents ?? 0
-          ]
-        );
-        await pool.end();
-
-        return res.status(201).json({ order: result.rows[0] });
-      } catch (err) {
-        console.error('[merchant] create order error:', err);
-        return res.status(500).json({ error: 'Failed to create order' });
-      }
-    }
-  );
+  router.post('/merchant/orders', ...orderGuards, orderHandler(async (repository, req) => {
+    const result = await repository.create(req.merchant!, req.body);
+    return { body: result, status: result.replayed ? 200 : 201 };
+  }));
 
   // ── GET /merchant/settings ───────────────────────────────────────────────
   router.get(
