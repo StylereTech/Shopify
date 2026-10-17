@@ -52,6 +52,7 @@ export class DispatchOrchestrator {
       id: randomUUID(),
       shopifyOrderId: order.id,
       merchantId: config.merchantId,
+      shopDomain: order.shopDomain,
       serviceLevel,
       status: 'pending',
       createdAt: now,

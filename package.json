@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "test": "vitest run",
+    "test:frontend:callbacks": "node --test --test-concurrency=1 tests/merchant-dashboard.test.mjs frontend/tests/merchant-pages.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "migrate": "tsx src/infrastructure/db/migrate.ts",
     "worker": "tsx src/worker.ts"

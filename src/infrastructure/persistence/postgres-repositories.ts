@@ -219,16 +219,16 @@ export class PostgresMerchantConfigRepository implements MerchantConfigRepositor
 export class PostgresDeliveryJobRepository implements DeliveryJobRepository {
   constructor(private readonly pool: Pool) {}
   async create(job: DeliveryJob): Promise<void> {
-    await this.pool.query('INSERT INTO delivery_jobs (id, shopify_order_id, merchant_id, service_level, status, dispatch_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [job.id, job.shopifyOrderId, job.merchantId, job.serviceLevel, job.status, job.dispatchId ?? null, job.createdAt, job.updatedAt]);
+    await this.pool.query("INSERT INTO delivery_jobs (id, shopify_order_id, merchant_id, shop_domain, service_level, status, dispatch_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::timestamptz AT TIME ZONE 'UTC',$9::timestamptz AT TIME ZONE 'UTC')", [job.id, job.shopifyOrderId, job.merchantId, job.shopDomain ?? null, job.serviceLevel, job.status, job.dispatchId ?? null, job.createdAt, job.updatedAt]);
   }
   async update(job: DeliveryJob): Promise<void> {
     await this.pool.query(
-      'UPDATE delivery_jobs SET status=$1, dispatch_id=$2, updated_at=$3, customer_phone=$4, shop_domain=$5, shopify_order_number=$6 WHERE shopify_order_id=$7',
-      [job.status, job.dispatchId ?? null, job.updatedAt, job.customerPhone ?? null, job.shopDomain ?? null, job.shopifyOrderNumber ?? null, job.shopifyOrderId]
+      "UPDATE delivery_jobs SET status=$1, dispatch_id=$2, updated_at=$3::timestamptz AT TIME ZONE 'UTC', customer_phone=$4, shopify_order_number=$5 WHERE shopify_order_id=$6",
+      [job.status, job.dispatchId ?? null, job.updatedAt, job.customerPhone ?? null, job.shopifyOrderNumber ?? null, job.shopifyOrderId]
     );
   }
   async getByShopifyOrderId(shopifyOrderId: string): Promise<DeliveryJob | undefined> {
-    const { rows } = await this.pool.query('SELECT * FROM delivery_jobs WHERE shopify_order_id=$1', [shopifyOrderId]);
+    const { rows } = await this.pool.query("SELECT *, created_at AT TIME ZONE 'UTC' AS created_at, updated_at AT TIME ZONE 'UTC' AS updated_at FROM delivery_jobs WHERE shopify_order_id=$1", [shopifyOrderId]);
     const row = rows[0];
     if (!row) return undefined;
     return {
@@ -246,7 +246,7 @@ export class PostgresDeliveryJobRepository implements DeliveryJobRepository {
     };
   }
   async getByDispatchId(dispatchId: string): Promise<DeliveryJob | undefined> {
-    const { rows } = await this.pool.query('SELECT * FROM delivery_jobs WHERE dispatch_id=$1', [dispatchId]);
+    const { rows } = await this.pool.query("SELECT *, created_at AT TIME ZONE 'UTC' AS created_at, updated_at AT TIME ZONE 'UTC' AS updated_at FROM delivery_jobs WHERE dispatch_id=$1", [dispatchId]);
     const row = rows[0];
     if (!row) return undefined;
     return {
@@ -338,7 +338,7 @@ export class PostgresWebhookEventRepository implements WebhookEventRepository {
 export class PostgresDispatchAttemptRepository implements DispatchAttemptRepository {
   constructor(private readonly pool: Pool) {}
   async create(attempt: DispatchAttempt): Promise<void> {
-    await this.pool.query('INSERT INTO dispatch_attempts (id, job_id, attempted_at, success, retry_count, error_class, provider_status_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [attempt.id, attempt.jobId, attempt.attemptedAt, attempt.success, attempt.retryCount, attempt.errorClass ?? null, attempt.providerStatusCode ?? null, attempt.errorMessage ?? null]);
+    await this.pool.query("INSERT INTO dispatch_attempts (id, job_id, attempted_at, success, retry_count, error_class, provider_status_code, error_message) VALUES ($1,$2,$3::timestamptz AT TIME ZONE 'UTC',$4,$5,$6,$7,$8)", [attempt.id, attempt.jobId, attempt.attemptedAt, attempt.success, attempt.retryCount, attempt.errorClass ?? null, attempt.providerStatusCode ?? null, attempt.errorMessage ?? null]);
   }
 }
 

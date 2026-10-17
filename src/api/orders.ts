@@ -17,6 +17,7 @@
 
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
+import { isBookableService } from '../domain/order-service.js';
 import {
   StorreeOrder,
   StorreeOrderRepository,
@@ -81,6 +82,7 @@ interface DoorDashDispatchResult {
 }
 
 async function dispatchOrderDirect(order: StorreeOrder): Promise<DoorDashDispatchResult> {
+  if (!isBookableService(order.serviceType)) return { success: false, error: 'Recorded requests cannot be dispatched.' };
   const {
     DOORDASH_DEVELOPER_ID,
     DOORDASH_KEY_ID,
@@ -224,6 +226,7 @@ function calculatePricing(serviceType: string): PricingQuote {
 // Prevents double-dispatch if /payments/confirm AND stripe webhook both fire.
 
 async function dispatchIfNotAlready(order: StorreeOrder): Promise<void> {
+  if (!isBookableService(order.serviceType)) return;
   // Already dispatched — skip
   if (order.doordashExternalId || order.status === 'assigned') {
     console.log(`[dispatch] Order ${order.id} already dispatched — skipping`);
@@ -274,6 +277,16 @@ function mapDoorDashStatus(raw: string): OrderStatus | undefined {
 
 export function createOrdersRouter(): Router {
   const router = Router();
+  const customerOrder = async (id: string, res: Response): Promise<StorreeOrder | undefined> => {
+    try {
+      const order = await _orderRepo.getById(id);
+      if (order && isBookableService(order.serviceType)) return order;
+      res.status(404).json({ error: 'Order not found' });
+    } catch {
+      res.status(503).json({ error: 'Order details are temporarily unavailable. Try again.' });
+    }
+    return undefined;
+  };
 
   // POST /api/orders/create
   router.post('/orders/create', async (req: Request, res: Response) => {
@@ -283,6 +296,7 @@ export function createOrdersRouter(): Router {
       if (!serviceType || !pickupAddress || !dropoffAddress || !contact) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
+      if (!isBookableService(serviceType)) return res.status(400).json({ error: 'Unsupported customer service type.' });
 
       const id = 'SR-' + randomUUID().split('-')[0].toUpperCase();
       const pricing = calculatePricing(serviceType);
@@ -326,7 +340,7 @@ export function createOrdersRouter(): Router {
   router.get('/orders/active', async (_req: Request, res: Response) => {
     try {
       const active = await _orderRepo.listActive();
-      return res.json(active.map(orderToResponse));
+      return res.json(active.filter(order => isBookableService(order.serviceType)).map(orderToResponse));
     } catch (err) {
       console.error('listActive error:', err);
       return res.status(500).json({ error: 'Failed to list orders' });
@@ -335,15 +349,15 @@ export function createOrdersRouter(): Router {
 
   // GET /api/orders/:id
   router.get('/orders/:id', async (req: Request, res: Response) => {
-    const order = await _orderRepo.getById(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    const order = await customerOrder(req.params.id, res);
+    if (!order) return;
     return res.json(orderToResponse(order));
   });
 
   // GET /api/orders/:id/tracking
   router.get('/orders/:id/tracking', async (req: Request, res: Response) => {
-    const order = await _orderRepo.getById(req.params.id);
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    const order = await customerOrder(req.params.id, res);
+    if (!order) return;
 
     // Try to fetch live DoorDash status
     let doordashStatus: string | undefined;
@@ -406,13 +420,17 @@ export function createOrdersRouter(): Router {
   });
 
   // GET /api/orders/:id/chat
-  router.get('/orders/:id/chat', (req: Request, res: Response) => {
+  router.get('/orders/:id/chat', async (req: Request, res: Response) => {
+    const order = await customerOrder(req.params.id, res);
+    if (!order) return;
     const messages = chatStore.get(req.params.id) ?? [];
     return res.json(messages);
   });
 
   // POST /api/orders/:id/chat
-  router.post('/orders/:id/chat', (req: Request, res: Response) => {
+  router.post('/orders/:id/chat', async (req: Request, res: Response) => {
+    const order = await customerOrder(req.params.id, res);
+    if (!order) return;
     const { message, sender = 'customer' } = req.body;
     if (!message) return res.status(400).json({ error: 'Message required' });
 
@@ -446,6 +464,9 @@ export function createPaymentsRouter(): Router {
     }
 
     try {
+      const order = await _orderRepo.getById(orderId);
+      if (!order) return res.status(404).json({ error: 'Order not found' });
+      if (!isBookableService(order.serviceType)) return res.status(409).json({ error: 'This request is recorded only. Payment and dispatch are unavailable.' });
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
       if (!stripeSecretKey) {
         // Dev mode: return mock intent
@@ -502,6 +523,7 @@ export function createPaymentsRouter(): Router {
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
+    if (!isBookableService(order.serviceType)) return res.status(409).json({ error: 'This request is recorded only. Payment and dispatch are unavailable.' });
 
     try {
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -621,6 +643,7 @@ export function createPaymentsRouter(): Router {
 
       if (orderId) {
         const order = await _orderRepo.getById(orderId).catch(() => undefined);
+        if (order && !isBookableService(order.serviceType)) return res.json({ received: true, ignored: 'record_only' });
         if (order) {
           // Update payment status
           order.stripePaymentIntentId = pi.id;
@@ -647,6 +670,7 @@ export function createPaymentsRouter(): Router {
 
       if (orderId) {
         const order = await _orderRepo.getById(orderId).catch(() => undefined);
+        if (order && !isBookableService(order.serviceType)) return res.json({ received: true, ignored: 'record_only' });
         if (order && order.status === 'pending') {
           order.status = 'failed';
           order.paymentStatus = 'failed';

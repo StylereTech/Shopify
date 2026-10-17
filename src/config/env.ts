@@ -42,7 +42,7 @@ const schema = z.object({
   // Dispatch provider. Production must run DoorDash Drive; fake is local/test only.
   DISPATCH_PROVIDER: z.enum(['doordash', 'fake']).default('doordash'),
   // Merchant platform
-  MERCHANT_JWT_SECRET: z.string().optional().default('dev-merchant-jwt-secret-change-in-production'),
+  MERCHANT_JWT_SECRET: z.string().optional(),
   MERCHANT_STRIPE_PRICE_ACCESS: z.string().optional(),
   MERCHANT_STRIPE_PRICE_GROWTH: z.string().optional(),
   FRONTEND_URL: z.string().optional().default('https://delivery.stylere.app'),

@@ -6,6 +6,8 @@ This repo is the source of truth for the Shopify app.
 It is intentionally separate from `Style.re1.1`.
 Do not treat `Style.re1.1/apps/shopify` as the primary app repo.
 
+Frontend page/section entry points are mapped in [the frontend route guide](frontend/README.md). The [October 17 merchant flow review](MERCHANT-FLOW-REVIEW-2026-10-17.md) records the latest repair scope, verification and release prerequisites.
+
 Infrastructure-ready Shopify app baseline for Storree one-hour and same-day local delivery.
 
 ## Cycle 8 status
@@ -32,6 +34,7 @@ Infrastructure-ready Shopify app baseline for Storree one-hour and same-day loca
 - `REDIS_DEAD_LETTER_KEY`
 - `WORKER_MAX_RETRIES`
 - `TOKEN_ENCRYPTION_KEY_HEX` (64-char hex)
+- `MERCHANT_JWT_SECRET` (explicit merchant-session signing secret; no development fallback)
 - `STORREE_API_BASE_URL`
 - `STORREE_API_KEY`
 - `STORREE_TIMEOUT_MS`

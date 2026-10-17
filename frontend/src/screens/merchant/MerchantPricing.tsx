@@ -1,132 +1,37 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { merchantApi, type Plan } from '../../api/merchantApi';
+import { useMerchantAuth } from '../../context/merchantAuthState';
+import { confirmedMerchantPlans, merchantPlanPrice } from '../../lib/merchantPageContracts';
+import './merchant-pages.css';
 
-export const MerchantPricing: React.FC = () => {
-  const navigate = useNavigate();
+export function MerchantPricing() {
+  const { merchant, loading: authLoading } = useMerchantAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-
+  const [attempt, setAttempt] = useState(0);
+  const retryPlans = () => { setLoading(true); setError(false); setPlans([]); setAttempt(value => value + 1); };
   useEffect(() => {
-    merchantApi
-      .plans()
-      .then((data) => {
-        if (data.plans && data.plans.length > 0) {
-          setPlans(data.plans);
-        } else {
-          setError(true);
-        }
-      })
-      .catch(() => {
-        setError(true);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#09090b', color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
-      {/* Header */}
-      <header style={{ padding: '24px 32px', borderBottom: '1px solid #27272a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, background: '#f59e0b', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#09090b', fontSize: 18 }}>S</div>
-          <span style={{ fontWeight: 700, fontSize: 20 }}>Storree</span>
-        </div>
-        <button
-          onClick={() => navigate('/merchant/login')}
-          style={{ background: 'transparent', border: '1px solid #3f3f46', color: '#a1a1aa', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}
-        >
-          Sign In
-        </button>
-      </header>
-
-      {/* Hero */}
-      <section style={{ textAlign: 'center', padding: '72px 24px 48px' }}>
-        <h1 style={{ fontSize: 48, fontWeight: 800, margin: '0 0 16px', background: 'linear-gradient(135deg, #fff, #a1a1aa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          Simple, Transparent Pricing
-        </h1>
-        <p style={{ color: '#71717a', fontSize: 18, maxWidth: 480, margin: '0 auto' }}>
-          Get your store delivering in under an hour. No hidden fees, cancel anytime.
-        </p>
-      </section>
-
-      {/* Plans */}
-      <section style={{ display: 'flex', gap: 24, justifyContent: 'center', padding: '0 24px 80px', flexWrap: 'wrap' }}>
-        {loading ? (
-          <div style={{ color: '#71717a', padding: 40 }}>Loading plans...</div>
-        ) : error ? (
-          <p role="alert" style={{ color: '#fca5a5', padding: 40 }}>Current plans are unavailable. Please try again later.</p>
-        ) : (
-          plans.map((plan) => (
-            <div
-              key={plan.id}
-              style={{
-                background: plan.popular ? '#18181b' : '#111113',
-                border: plan.popular ? '2px solid #f59e0b' : '1px solid #27272a',
-                borderRadius: 16,
-                padding: 32,
-                width: 320,
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {plan.popular && (
-                <div style={{
-                  position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
-                  background: '#f59e0b', color: '#09090b', fontWeight: 700, fontSize: 12,
-                  padding: '4px 16px', borderRadius: 999, whiteSpace: 'nowrap'
-                }}>
-                  MOST POPULAR
-                </div>
-              )}
-
-              <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 700 }}>{plan.name}</h2>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 24 }}>
-                <span style={{ fontSize: 48, fontWeight: 800, color: plan.popular ? '#f59e0b' : '#fff' }}>
-                  {plan.price_display || `$${(plan.price_cents / 100).toFixed(0)}`}
-                </span>
-                <span style={{ color: '#71717a', fontSize: 16 }}>/month</span>
-              </div>
-
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 32px', flex: 1 }}>
-                {(plan.features || []).map((f) => (
-                  <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, color: '#d4d4d8', fontSize: 14 }}>
-                    <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 16 }}>✓</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                onClick={() => navigate(`/merchant/signup?plan=${plan.id}`)}
-                style={{
-                  background: plan.popular ? '#f59e0b' : 'transparent',
-                  color: plan.popular ? '#09090b' : '#f59e0b',
-                  border: plan.popular ? 'none' : '1px solid #f59e0b',
-                  padding: '14px 24px',
-                  borderRadius: 10,
-                  fontWeight: 700,
-                  fontSize: 15,
-                  cursor: 'pointer',
-                  transition: 'opacity 0.2s',
-                }}
-                onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-                onMouseOut={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-              >
-                Get Started
-              </button>
-            </div>
-          ))
-        )}
-      </section>
-
-      {/* Footer */}
-      <footer style={{ borderTop: '1px solid #27272a', padding: '24px 32px', textAlign: 'center', color: '#52525b', fontSize: 13 }}>
-        © 2026 Storree. Last-mile delivery for retail. All rights reserved.
-      </footer>
-    </div>
-  );
-};
-
+    const controller = new AbortController();
+    merchantApi.plans(controller.signal).then(value => {
+      if (!controller.signal.aborted) setPlans(confirmedMerchantPlans(value));
+    }).catch(() => { if (!controller.signal.aborted) setError(true); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [attempt]);
+  return <div className="merchant-pages">
+    <header><Link className="merchant-brand" to="/">Storree</Link><nav aria-label="Merchant navigation"><Link to={merchant ? '/merchant/dashboard' : '/merchant/login'}>{merchant ? 'Dashboard' : 'Sign in'}</Link></nav></header>
+    <main>
+      <div className="merchant-intro"><h1>Merchant plans</h1><p className="merchant-muted">Review the current monthly plans. Account activation and delivery availability are confirmed separately.</p></div>
+      {loading ? <p role="status">Loading plans...</p> : error ? <div role="alert" className="merchant-alert"><p>Current plans are unavailable. Please try again.</p><button type="button" onClick={retryPlans}>Retry plans</button></div> : <div className="merchant-grid">
+        {plans.map(plan => <article className="merchant-card merchant-plan" key={plan.id}>
+          <h2>{plan.name}</h2><p className="merchant-price">{merchantPlanPrice(plan)}</p>
+          <ul>{plan.features.map((feature,index) => <li key={`${index}:${feature}`}>{feature}</li>)}</ul>
+          {authLoading ? <p role="status">Checking account…</p> : <Link className="merchant-button" to={merchant ? '/merchant/dashboard?tab=billing' : `/merchant/signup?plan=${encodeURIComponent(plan.id)}`}>{merchant ? 'Review billing' : 'Get started'}</Link>}
+        </article>)}
+      </div>}
+    </main>
+  </div>;
+}
 export default MerchantPricing;
