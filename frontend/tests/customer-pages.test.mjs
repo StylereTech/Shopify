@@ -94,6 +94,18 @@ test('customer routes retain safe order/history context and reject ambiguous IDs
   assert.equal(helpers.historyPath(1), '/orders?page=1');
 });
 
+test('payment configuration loading and failure block intent creation with a retry path', async () => {
+  for (const pending of [true,false]) {
+    const state={data:undefined,isPending:pending,isError:!pending,refetch:async()=>{}};
+    const page=fixture('screens/Payment.tsx','PaymentSetup',{queries:{'customer-payment-configuration':state}});
+    assert.match(page.text(),pending?/Loading secure payment options/:/Online payment is unavailable/);
+    assert.equal(page.calls.some(call=>call[0]==='createPaymentIntent'),false);
+    if(!pending) assert.ok(page.button('Retry payment options'));
+    const configuration=page.queryOptions.find(query=>query.queryKey[0]==='customer-payment-configuration');
+    assert.equal(configuration.queryKey[1],page.session.key);assert.equal(configuration.retry,false);page.unmount();
+  }
+});
+
 test('checkout recovery never changes its saved request and only authoritative write rejection releases it', async () => {
   const page = fixture('lib/customerCheckoutAction.ts'); const { executeCheckoutRequest } = page.module;
   const params = { session: page.session, mode: 'save', signal: new AbortController().signal, current: () => true };

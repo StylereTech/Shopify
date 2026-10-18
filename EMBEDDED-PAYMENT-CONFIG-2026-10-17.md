@@ -1,0 +1,11 @@
+# Embedded payment configuration
+
+The main website serves a separately compiled Shopify app. Its payment chunk previously captured `VITE_STRIPE_PK` only at compilation, so deployment environment changes on the main website could not configure the prebuilt checkout. The newer source also needed a bounded failure/retry state while loading Stripe itself.
+
+PaymentSetup now verifies public payment configuration and the loaded Stripe SDK before enabling intent setup. Embedded releases fetch `/shopify/runtime-config.json` with no credentials, no redirect and no cache. The response must be JSON schema version 1 with a valid publishable key; secret-shaped keys, error payloads and unavailable responses are rejected. A single 15-second deadline covers fetch, body and SDK loading, including dependencies that ignore abort. Standalone builds retain their explicit compiled public key.
+
+Configuration queries use the captured guest generation and verify that session again before accepting the SDK. Pending, failed and unconfigured states cannot create an intent. Retry loads payment options; paid confirmation still requires the existing backend receipt. No card, wallet, live key or provider was exercised by these checks.
+
+The main site must generate this public configuration from an explicit Shopify publishable-key setting matched to its Shopify backend account/mode. It must reserve the JSON path ahead of the Shopify SPA rewrite and send no-store headers. Browser cookie proxying, Stripe domain/wallet acceptance, migrations 005/006, backend deployment and broader retention enforcement remain open release requirements.
+
+Verification: 75 Node callback/configuration checks passed, zero failures/skips (43 merchant, 22 customer page callbacks, 10 configuration cases). The configuration cases execute actual source with controlled fetch/Stripe boundaries, including malformed responses, fetch/body/SDK deadlines, cancellation and standalone fallback. Frontend lint, TypeScript and production build passed (2.17s). No browser or provider transaction was run. The main bundle synchronization is a separate source-bound release step; this source commit does not itself update or deploy the main website.

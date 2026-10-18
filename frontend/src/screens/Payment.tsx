@@ -2,20 +2,18 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
-import { loadStripe, type StripeExpressCheckoutElementConfirmEvent } from '@stripe/stripe-js';
+import { type StripeExpressCheckoutElementConfirmEvent } from '@stripe/stripe-js';
 import { AppShell } from '../components/layout/AppShell';
 import { MissingOrder, OrderPrice, ReadError, SessionNotice } from '../components/customer/CustomerUI';
 import { useCustomerSession } from '../context/useCustomerSession';
 import { useCustomerAction } from '../hooks/useCustomerAction';
 import { useOrderStore } from '../store/orderStore';
 import { customerApi } from '../api/client';
+import { loadPaymentConfiguration } from '../api/paymentConfiguration';
 import { CustomerRequestError } from '../api/customerSession';
 import { customerRecordUnavailable, customerErrorMessage, money, orderPath, readOrderLocation, terminalOrder, trackingPath } from '../lib/customerPageState';
 import { paymentIntentForOrder, verifiedStripeResult, waitForPaymentSdk } from '../lib/customerPaymentState';
 import type { Order, PaymentIntent } from '../types';
-
-const stripeKey = import.meta.env.VITE_STRIPE_PK;
-const stripePromise = typeof stripeKey === 'string' && /^pk_(test|live)_/.test(stripeKey) ? loadStripe(stripeKey) : null;
 
 export function Payment() {
   const session = useCustomerSession();
@@ -46,11 +44,13 @@ function PaymentOrder({ session, orderId }: { session: ReturnType<typeof useCust
 }
 function PaymentSetup({ session, order }: { session: ReturnType<typeof useCustomerSession>; order: Order }) {
   const navigate = useNavigate();
+  const configuration = useQuery({ queryKey: ['customer-payment-configuration', session.key], queryFn: async ({ signal }) => { const stripe = await loadPaymentConfiguration(signal); session.assertCurrent(); return stripe; }, retry: false, staleTime: 0, gcTime: 0 });
   const action = useCustomerAction(session);
   const [intent, setIntent] = useState<PaymentIntent | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [pending, setPending] = useState(false);
   const load = async () => {
+    if (!configuration.data || configuration.isError || configuration.isPending) return;
     const scope = action.begin();
     if (!scope) return;
     setError(null); setIntent(null); setPending(false);
@@ -74,13 +74,14 @@ function PaymentSetup({ session, order }: { session: ReturnType<typeof useCustom
     } catch (caught) { if (scope.current()) setError(caught); }
     finally { scope.finish(); }
   };
-  if (!stripePromise) return <div className="customer-notice" data-tone="error"><h2>Online payment is unavailable</h2><p>Payment options have not been configured for this website. Your order remains unpaid.</p><Link to="/support">Contact support</Link></div>;
+  if (configuration.isPending) return <p role="status">Loading secure payment options…</p>;
+  if (configuration.isError || !configuration.data) return <div className="customer-notice" data-tone="error"><h2>Online payment is unavailable</h2><p>Payment options could not be loaded for this website. Your order remains unpaid.</p><button className="customer-button" type="button" onClick={() => void configuration.refetch()}>Retry payment options</button><Link to="/support">Contact support</Link></div>;
   return <section className="customer-card"><h2>Secure payment</h2>
     <p className="customer-muted">Available methods depend on this device, Stripe settings, and your order. Payment does not guarantee courier availability.</p>
     {error != null && <ReadError error={error} session={session} retry={load} />}
     {pending && <p className="customer-notice" data-tone="info" role="status">Your payment is still processing. Check its saved status before trying another method.</p>}
     {!intent && !(error instanceof CustomerRequestError && error.code === 'PAYMENT_RECONCILIATION_REQUIRED') && <button className="customer-button" type="button" disabled={action.busy} onClick={() => void load()}>{action.busy ? 'Checking payment…' : pending ? 'Check payment status' : 'Check payment and load methods'}</button>}
-    {intent && <Elements key={intent.paymentIntentId} stripe={stripePromise} options={{ clientSecret: intent.clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#b64017', colorText: '#18212b', colorBackground: '#ffffff', colorDanger: '#a33221', fontSizeBase: '16px', borderRadius: '10px' } } }}>
+    {intent && <Elements key={intent.paymentIntentId} stripe={configuration.data} options={{ clientSecret: intent.clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#b64017', colorText: '#18212b', colorBackground: '#ffffff', colorDanger: '#a33221', fontSizeBase: '16px', borderRadius: '10px' } } }}>
       <PaymentForm session={session} order={order} intent={intent} action={action} recheck={load} />
     </Elements>}
   </section>;
