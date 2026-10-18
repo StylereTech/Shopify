@@ -44,7 +44,7 @@ function PaymentOrder({ session, orderId }: { session: ReturnType<typeof useCust
 }
 function PaymentSetup({ session, order }: { session: ReturnType<typeof useCustomerSession>; order: Order }) {
   const navigate = useNavigate();
-  const configuration = useQuery({ queryKey: ['customer-payment-configuration', session.key], queryFn: async ({ signal }) => { const stripe = await loadPaymentConfiguration(signal); session.assertCurrent(); return stripe; }, retry: false, staleTime: 0, gcTime: 0 });
+  const configuration = useQuery({ queryKey: ['customer-payment-configuration', session.key], queryFn: async ({ signal }) => { const stripe = await loadPaymentConfiguration(signal); session.assertCurrent(); return stripe; }, retry: false, structuralSharing: false, staleTime: 0, gcTime: 0 });
   const action = useCustomerAction(session);
   const [intent, setIntent] = useState<PaymentIntent | null>(null);
   const [error, setError] = useState<unknown>(null);

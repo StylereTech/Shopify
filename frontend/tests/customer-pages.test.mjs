@@ -102,7 +102,7 @@ test('payment configuration loading and failure block intent creation with a ret
     assert.equal(page.calls.some(call=>call[0]==='createPaymentIntent'),false);
     if(!pending) assert.ok(page.button('Retry payment options'));
     const configuration=page.queryOptions.find(query=>query.queryKey[0]==='customer-payment-configuration');
-    assert.equal(configuration.queryKey[1],page.session.key);assert.equal(configuration.retry,false);page.unmount();
+    assert.equal(configuration.queryKey[1],page.session.key);assert.equal(configuration.retry,false);assert.equal(configuration.structuralSharing,false);page.unmount();
   }
 });
 
