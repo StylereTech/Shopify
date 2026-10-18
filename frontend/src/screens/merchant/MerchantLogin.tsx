@@ -30,7 +30,7 @@ export function MerchantLogin() {
     }
   };
   return <div className="merchant-pages">
-    <header><Link className="merchant-brand" to="/">Storree</Link><nav aria-label="Merchant navigation"><Link to="/merchant/pricing">See plans</Link></nav></header>
+    <header><Link className="merchant-brand" to="/">Style.re</Link><nav aria-label="Merchant navigation"><Link to="/merchant/pricing">See plans</Link></nav></header>
     <main><div className="merchant-form"><h1>Merchant sign in</h1><p className="merchant-muted">Use your merchant account to review store orders and billing.</p>
       {error && <div className="merchant-alert" role="alert">{error}</div>}
       {authLoading && <p role="status">Checking your account…</p>}

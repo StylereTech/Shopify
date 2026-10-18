@@ -21,7 +21,7 @@ export function MerchantPricing() {
     return () => controller.abort();
   }, [attempt]);
   return <div className="merchant-pages">
-    <header><Link className="merchant-brand" to="/">Storree</Link><nav aria-label="Merchant navigation"><Link to={merchant ? '/merchant/dashboard' : '/merchant/login'}>{merchant ? 'Dashboard' : 'Sign in'}</Link></nav></header>
+    <header><Link className="merchant-brand" to="/">Style.re</Link><nav aria-label="Merchant navigation"><Link to={merchant ? '/merchant/dashboard' : '/merchant/login'}>{merchant ? 'Dashboard' : 'Sign in'}</Link></nav></header>
     <main>
       <div className="merchant-intro"><h1>Merchant plans</h1><p className="merchant-muted">Review the current monthly plans. Account activation and delivery availability are confirmed separately.</p></div>
       {loading ? <p role="status">Loading plans...</p> : error ? <div role="alert" className="merchant-alert"><p>Current plans are unavailable. Please try again.</p><button type="button" onClick={retryPlans}>Retry plans</button></div> : <div className="merchant-grid">

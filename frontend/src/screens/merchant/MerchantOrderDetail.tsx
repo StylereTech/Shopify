@@ -36,7 +36,7 @@ function MerchantOrderDetailSession({ session, id, backTo }: { session:ReturnTyp
   const signInTo = `/merchant/login?returnTo=${encodeURIComponent(`/merchant/orders/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(backTo)}`)}`;
   const readable = (value:string) => value.replace(/_/g,' ');
   return <div className="merchant-pages">
-    <header><Link className="merchant-brand" to="/">Storree</Link><nav aria-label="Order navigation"><Link to={backTo}>Back to dashboard</Link><Link to="/support">Support</Link></nav></header>
+    <header><Link className="merchant-brand" to="/">Style.re</Link><nav aria-label="Order navigation"><Link to={backTo}>Back to dashboard</Link><Link to="/support">Support</Link></nav></header>
     <main>
       <h1>Order detail</h1>
       {pending ? <p role="status">Loading order...</p> : denied ? <div role="alert" className="merchant-alert"><h2>Order access needs verification</h2><p>Sign in with the authorized merchant account or review your billing plan to access this order.</p><div className="merchant-actions"><Link to={signInTo}>Sign in again</Link><Link to="/merchant/dashboard?tab=billing">Review billing</Link></div></div>

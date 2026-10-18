@@ -69,7 +69,7 @@ export const MerchantLanding: React.FC = () => {
               Connect your store.<br />Plan the delivery handoff.
             </h1>
             <p className="text-[#A8A29E] text-[clamp(0.9rem,2vw,1.05rem)] leading-relaxed max-w-sm mx-auto">
-              Explore store pickup and delivery with Storree. Review your store’s eligibility, checkout flow, and current plan before launch.
+              Explore store pickup and delivery with Style.re. Review your store’s eligibility, checkout flow, and current plan before launch.
             </p>
 
             <button
@@ -135,7 +135,7 @@ export const MerchantLanding: React.FC = () => {
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-10">
             <h2 className="text-[clamp(1.4rem,3.5vw,2rem)] font-bold text-white tracking-tight mb-2">
-              Why boutiques choose Storree
+              Why boutiques choose Style.re
             </h2>
             <p className="text-[#A8A29E] text-[15px]">Built around the retail pickup and delivery handoff.</p>
           </div>
@@ -230,7 +230,7 @@ export const MerchantLanding: React.FC = () => {
                   rel="noopener noreferrer"
                   className="block w-full bg-[#1C1917] text-white text-center font-bold rounded-2xl py-4 text-[15px] active:scale-[0.98] transition-all duration-150 mb-3"
                 >
-                  Install Storree on Shopify →
+                  Install Style.re on Shopify →
                 </a>
                 <p className="text-[14px] text-[#57534E] text-center">
                   Opens a new tab to start installation. Shopify approval and store setup still need to be completed.

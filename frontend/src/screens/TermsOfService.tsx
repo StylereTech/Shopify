@@ -14,8 +14,8 @@ export const TermsOfService: React.FC = () => {
 
         <Section title="1. Agreement to Terms">
           <p>
-            These Terms of Service ("Terms") govern your use of the Storree: Local Fashion Delivery application
-            (the "App" or "Service") provided by Style.re Unlimited Co. ("Style.re," "Storree," "we," "our,"
+            These Terms of Service ("Terms") govern your use of the Style.re: Local Fashion Delivery application
+            (the "App" or "Service") provided by Style.re Unlimited Co. ("Style.re," "we," "our,"
             or "us"), a Delaware company.
           </p>
           <p className="mt-3">
@@ -26,7 +26,7 @@ export const TermsOfService: React.FC = () => {
 
         <Section title="2. Service Description">
           <p>
-            Storree provides same-hour local delivery for Shopify merchants. The Service enables:
+            Style.re provides same-hour local delivery for Shopify merchants. The Service enables:
           </p>
           <ul className="list-disc pl-5 space-y-2 mt-3">
             <li>Integration of a "local delivery" shipping option at your Shopify checkout</li>
@@ -35,7 +35,7 @@ export const TermsOfService: React.FC = () => {
             <li>SMS and email notifications throughout the delivery process</li>
           </ul>
           <p className="mt-3">
-            Storree acts as a platform connecting merchants with third-party courier services. We are not
+            Style.re acts as a platform connecting merchants with third-party courier services. We are not
             ourselves a courier or logistics carrier.
           </p>
         </Section>
@@ -55,7 +55,7 @@ export const TermsOfService: React.FC = () => {
 
         <Section title="4. Delivery Service Level Agreement">
           <p>
-            <strong>Best-Effort Service.</strong> Storree facilitates same-hour delivery on a best-effort basis.
+            <strong>Best-Effort Service.</strong> Style.re facilitates same-hour delivery on a best-effort basis.
             We do not guarantee specific delivery windows, delivery times, or successful delivery in all
             circumstances.
           </p>
