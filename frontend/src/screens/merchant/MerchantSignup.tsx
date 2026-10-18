@@ -81,7 +81,7 @@ function MerchantSignupForm({ requestedPlan }: { requestedPlan:string }) {
   };
 
   return <div className="merchant-pages">
-    <header><Link to="/" className="merchant-brand">Storree</Link><nav aria-label="Merchant navigation"><Link to="/merchant/pricing">Plans</Link><Link to="/merchant/login">Sign in</Link></nav></header>
+    <header><Link to="/" className="merchant-brand">Style.re</Link><nav aria-label="Merchant navigation"><Link to="/merchant/pricing">Plans</Link><Link to="/merchant/login">Sign in</Link></nav></header>
     <main><div className="merchant-form">
       <h1>Create your merchant account</h1><p className="merchant-muted">Review a current plan, then continue to hosted checkout. Payment and plan activation must be confirmed before delivery services are enabled.</p>
       {authLoading ? <p role="status">Checking account…</p> : merchant ? <div className="merchant-notice"><p>You are already signed in. Manage your existing account from billing.</p><Link to="/merchant/dashboard?tab=billing">Review billing</Link></div> : token || authError ? <div role="alert" className="merchant-alert"><p>Your existing account session needs verification before you can create an account.</p><div className="merchant-actions"><Link to="/merchant/login">Sign in to verify your account</Link><Link to="/support">Contact support</Link></div></div> : <>

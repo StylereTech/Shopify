@@ -14,7 +14,7 @@ export const PrivacyPolicy: React.FC = () => {
 
         <Section title="1. Introduction">
           <p>
-            Style.re Unlimited Co. ("Style.re," "Storree," "we," "our," or "us") operates the Storree: Local
+            Style.re Unlimited Co. ("Style.re," "we," "our," or "us") operates the Style.re: Local
             Fashion Delivery application available on the Shopify App Store (the "App"). This Privacy Policy
             explains how we collect, use, disclose, and safeguard information when you install and use our App.
           </p>
